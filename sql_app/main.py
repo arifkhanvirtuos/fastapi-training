@@ -26,7 +26,14 @@ items_array = [
 
 def run_migrations():
     """Run Alembic migrations automatically"""
-    alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+    # Get the directory where this file is located
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    alembic_ini_path = os.path.join(current_dir, "alembic.ini")
+    
+    # Create Alembic config and set the script location
+    alembic_cfg = Config(alembic_ini_path)
+    alembic_cfg.set_main_option("script_location", os.path.join(current_dir, "alembic"))
+    
     command.upgrade(alembic_cfg, "head")
 
 @asynccontextmanager
