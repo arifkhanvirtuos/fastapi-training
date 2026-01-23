@@ -5,6 +5,7 @@ from .database import get_db, init_db
 from pydantic import BaseModel
 from alembic.config import Config
 from alembic import command
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 
@@ -29,23 +30,25 @@ def run_migrations():
     alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
     command.upgrade(alembic_cfg, "head")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup code
-    print("Starting up...")
-    print("Running database migrations...")
-    try:
-        run_migrations()
-        print("Migrations completed successfully!")
-    except Exception as e:
-        print(f"Migration error: {e}")
-        # Optionally, you can still start the app or raise the exception
-        # raise e
-    yield
-    # Shutdown code
-    print("Shutting down...")
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # Startup code
+#     print("Starting up...")
+#     print("Running database migrations...")
+#     try:
+#         run_migrations()
+#         print("Migrations completed successfully!")
+#     except Exception as e:
+#         print(f"Migration error: {e}")
+#         # Optionally, you can still start the app or raise the exception
+#         # raise e
+#     yield
+#     # Shutdown code
+#     print("Shutting down...")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
+
+
 
 
 
