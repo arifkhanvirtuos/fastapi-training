@@ -1,12 +1,20 @@
 # create table user( username VARCHAR(50) PRIMARY KEY, full_name VARCHAR(100), email VARCHAR(100) UNIQUE, hashed_password VARCHAR(100), is_active BOOLEAN DEFAULT TRUE );
 
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, ARRAY, JSON, Numeric, Text, DateTime, Index, Table, func
-
-
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, ARRAY, JSON, Numeric, Text, DateTime, Index, Table, func, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
+from enum import Enum
+
+
+# User Role Enumeration
+class UserRole(str, Enum):
+    """User roles in the system for role-based access control"""
+    ADMIN = "admin"
+    MANAGER = "manager"
+    USER = "user"
+    GUEST = "guest"
 
 # Try relative import first (when used as a package), fall back to absolute
 try:
@@ -27,6 +35,7 @@ class User(Base):
     hashed_password = Column(String(100), nullable=False)
     full_name = Column(String(100), nullable=True)
     phone_number = Column(String(15), nullable=True)
+    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.USER, server_default='user')
     is_active = Column(Boolean, default= False)
     address = Column(String(200), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default= func.now())

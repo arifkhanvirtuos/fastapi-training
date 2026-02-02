@@ -1,9 +1,11 @@
 # Advanced SQLAlchemy CRUD Operations - Teaching Guide
+
 ## Duration: 1 Hour
 
 ---
 
 ## Table of Contents
+
 1. [Joins and Eager Loading](#1-joins-and-eager-loading)
 2. [Filtering and Sorting](#2-filtering-and-sorting)
 3. [Aggregations](#3-aggregations)
@@ -16,12 +18,15 @@
 ## 1. Joins and Eager Loading
 
 ### What are Joins?
+
 **Joins** are SQL operations that combine rows from two or more tables based on a related column between them. In SQLAlchemy, joins allow you to retrieve related data from multiple tables in a single query.
 
 ### Types of Joins
 
 #### Inner Join
+
 Returns only the rows where there is a match in both tables.
+
 ```python
 # Example: Get users with their profiles
 users_with_profiles = db.query(User).join(UserProfile).all()
@@ -31,16 +36,20 @@ products_with_materials = db.query(Product).join(Product.raw_materials).all()
 ```
 
 #### Left Outer Join
+
 Returns all rows from the left table and matched rows from the right table. If no match, NULL values are returned.
+
 ```python
 # Example: Get all users, including those without profiles
 users = db.query(User).outerjoin(UserProfile).all()
 ```
 
 ### The N+1 Problem
+
 **What is it?** When you fetch a list of objects, then for each object, you make an additional query to fetch related data. This results in 1 query + N queries (one per object).
 
 **Example of N+1 Problem:**
+
 ```python
 # This causes N+1 queries!
 products = db.query(Product).all()  # 1 query
@@ -51,6 +60,7 @@ for product in products:
 ### Eager Loading Solutions
 
 #### 1. **Joinedload** (SQL JOIN)
+
 Loads related objects in the same query using a SQL JOIN. Best for one-to-one or small one-to-many relationships.
 
 ```python
@@ -60,12 +70,14 @@ from sqlalchemy.orm import joinedload
 users = db.query(User).options(joinedload(User.profile)).all()
 ```
 
-**When to use:** 
+**When to use:**
+
 - One-to-one relationships
 - Small one-to-many relationships
 - When you need the related data immediately
 
 #### 2. **Selectinload** (Separate SELECT)
+
 Loads related objects with a separate SELECT query. Best for one-to-many or many-to-many relationships.
 
 ```python
@@ -76,11 +88,13 @@ products = db.query(Product).options(selectinload(Product.raw_materials)).all()
 ```
 
 **When to use:**
+
 - Large one-to-many relationships
 - Many-to-many relationships
 - Avoids duplicate data in result set
 
 #### 3. **Subqueryload** (Subquery)
+
 Similar to selectinload but uses a subquery instead of an IN clause.
 
 ```python
@@ -90,6 +104,7 @@ products = db.query(Product).options(subqueryload(Product.raw_materials)).all()
 ```
 
 #### 4. **Lazy Loading** (Default)
+
 Loads related objects only when accessed (causes N+1 problem).
 
 ```python
@@ -101,7 +116,7 @@ for product in products:
 
 ### Practical Example with Multiple Relationships
 
-```python
+````python
 from sqlalchemy.orm import joinedload, selectinload
 
 # Load users with their profile (1-to-1)
@@ -136,9 +151,10 @@ users = db.query(User).filter(
     User.is_active == True,
     User.email.endswith('@gmail.com')
 ).all()
-```
+````
 
 #### Using filter_by()
+
 Simpler syntax using keyword arguments (equality only).
 
 ```python
@@ -149,6 +165,7 @@ user = db.query(User).filter_by(email='test@example.com').first()
 ### Advanced Filtering Operators
 
 #### Comparison Operators
+
 ```python
 # Equal
 users = db.query(User).filter(User.age == 25).all()
@@ -166,6 +183,7 @@ users = db.query(User).filter(User.age <= 65).all()
 ```
 
 #### String Operations
+
 ```python
 # LIKE (case-sensitive pattern matching)
 users = db.query(User).filter(User.name.like('%John%')).all()
@@ -184,6 +202,7 @@ users = db.query(User).filter(User.name.contains('oh')).all()
 ```
 
 #### IN and NOT IN
+
 ```python
 # IN - check if value is in a list
 users = db.query(User).filter(User.id.in_([1, 2, 3, 4])).all()
@@ -193,6 +212,7 @@ users = db.query(User).filter(~User.id.in_([1, 2, 3])).all()
 ```
 
 #### NULL Checks
+
 ```python
 # IS NULL
 users = db.query(User).filter(User.phone_number == None).all()
@@ -206,6 +226,7 @@ users = db.query(User).filter(User.phone_number.isnot(None)).all()
 ```
 
 #### AND, OR, NOT
+
 ```python
 from sqlalchemy import and_, or_, not_
 
@@ -245,6 +266,7 @@ users = db.query(User).filter(
 ### Sorting
 
 #### order_by() - Ascending
+
 ```python
 # Sort by single column (ascending)
 users = db.query(User).order_by(User.name).all()
@@ -254,6 +276,7 @@ users = db.query(User).order_by(User.last_name, User.first_name).all()
 ```
 
 #### order_by() - Descending
+
 ```python
 from sqlalchemy import desc
 
@@ -268,6 +291,7 @@ users = db.query(User).order_by(
 ```
 
 #### Sorting with NULL values
+
 ```python
 from sqlalchemy import nullsfirst, nullslast
 
@@ -281,6 +305,7 @@ users = db.query(User).order_by(nullslast(User.phone_number)).all()
 ### Pagination
 
 #### limit() and offset()
+
 ```python
 # Get first 10 users
 users = db.query(User).limit(10).all()
@@ -299,11 +324,13 @@ def get_paginated_users(page: int, page_size: int):
 ## 3. Aggregations (count, sum, avg)
 
 ### What are Aggregations?
+
 **Aggregations** are operations that perform calculations on a set of values and return a single value. Common aggregations include counting rows, summing values, calculating averages, finding minimums and maximums.
 
 ### Count
 
 #### count() - Count all rows
+
 ```python
 # Count all users
 user_count = db.query(User).count()
@@ -313,6 +340,7 @@ active_user_count = db.query(User).filter(User.is_active == True).count()
 ```
 
 #### func.count() - More flexible counting
+
 ```python
 from sqlalchemy import func
 
@@ -389,6 +417,7 @@ price_range = db.query(
 ### GROUP BY and HAVING
 
 #### GROUP BY
+
 Groups rows with the same values in specified columns.
 
 ```python
@@ -410,6 +439,7 @@ monthly_revenue = db.query(
 ```
 
 #### HAVING
+
 Filters groups created by GROUP BY (like WHERE but for aggregated data).
 
 ```python
@@ -460,12 +490,15 @@ user_stats = db.query(
 ## 4. Transaction Management
 
 ### What is a Transaction?
+
 A **transaction** is a sequence of database operations that are treated as a single unit of work. Transactions ensure data integrity by following ACID properties.
 
 ### ACID Properties
 
 #### **A - Atomicity**
+
 All operations in a transaction succeed or all fail. No partial updates.
+
 ```python
 # Either both operations succeed or both fail
 try:
@@ -479,7 +512,9 @@ except:
 ```
 
 #### **C - Consistency**
+
 Database remains in a valid state before and after transaction.
+
 ```python
 # Ensures constraints are maintained
 user = User(email=None)  # If email is required, this will fail
@@ -488,14 +523,18 @@ db.commit()  # Raises error, database stays consistent
 ```
 
 #### **I - Isolation**
+
 Concurrent transactions don't interfere with each other.
+
 ```python
 # Two users updating the same account simultaneously
 # are isolated from each other
 ```
 
 #### **D - Durability**
+
 Committed transactions are permanent, even after system failures.
+
 ```python
 db.commit()  # Once committed, data is saved permanently
 ```
@@ -503,7 +542,9 @@ db.commit()  # Once committed, data is saved permanently
 ### Basic Transaction Operations
 
 #### commit()
+
 Saves all pending changes to the database.
+
 ```python
 user = User(email="test@example.com")
 db.add(user)
@@ -511,7 +552,9 @@ db.commit()  # Changes are now permanent
 ```
 
 #### rollback()
+
 Discards all pending changes since the last commit.
+
 ```python
 user = User(email="test@example.com")
 db.add(user)
@@ -519,7 +562,9 @@ db.rollback()  # User is not saved, changes discarded
 ```
 
 #### flush()
+
 Sends pending changes to the database but doesn't commit them. Useful when you need generated IDs.
+
 ```python
 user = User(email="test@example.com")
 db.add(user)
@@ -531,6 +576,7 @@ db.commit()  # Now it's permanent
 ### Transaction Patterns
 
 #### Manual Transaction Management
+
 ```python
 from sqlalchemy.orm import Session
 
@@ -539,13 +585,13 @@ def transfer_money(from_account_id, to_account_id, amount, db: Session):
         # Start transaction (implicit)
         from_account = db.query(Account).filter(Account.id == from_account_id).first()
         to_account = db.query(Account).filter(Account.id == to_account_id).first()
-        
+
         if from_account.balance < amount:
             raise ValueError("Insufficient funds")
-        
+
         from_account.balance -= amount
         to_account.balance += amount
-        
+
         db.commit()  # Both operations succeed
         return {"status": "success"}
     except Exception as e:
@@ -554,6 +600,7 @@ def transfer_money(from_account_id, to_account_id, amount, db: Session):
 ```
 
 #### Context Manager (Recommended)
+
 ```python
 from contextlib import contextmanager
 
@@ -574,16 +621,17 @@ with transaction_scope(db) as session:
 ```
 
 #### Nested Transactions (Savepoints)
+
 ```python
 from sqlalchemy.orm import Session
 
 def complex_operation(db: Session):
     user = User(email="test@example.com")
     db.add(user)
-    
+
     # Create a savepoint
     savepoint = db.begin_nested()
-    
+
     try:
         # Risky operation
         order = Order(user_id=user.id, total=1000000)
@@ -592,7 +640,7 @@ def complex_operation(db: Session):
     except Exception:
         # Rollback to savepoint, user is still added
         savepoint.rollback()
-    
+
     db.commit()  # User is saved, order might not be
 ```
 
@@ -641,6 +689,7 @@ engine = create_engine(
 ## 5. Session Lifecycle and Commit/Rollback
 
 ### What is a Session?
+
 A **Session** is SQLAlchemy's "workspace" for database operations. It manages the connection to the database and tracks changes to objects.
 
 ### Session States
@@ -648,14 +697,18 @@ A **Session** is SQLAlchemy's "workspace" for database operations. It manages th
 Objects in a session can be in different states:
 
 #### 1. Transient
+
 Object exists in Python but not associated with any session or database.
+
 ```python
 user = User(email="test@example.com")  # Transient
 # Not in session, not in database
 ```
 
 #### 2. Pending
+
 Object is added to session but not yet in database.
+
 ```python
 user = User(email="test@example.com")
 db.add(user)  # Now Pending
@@ -663,14 +716,18 @@ db.add(user)  # Now Pending
 ```
 
 #### 3. Persistent
+
 Object is in session and exists in database.
+
 ```python
 db.commit()  # Now Persistent
 # In session, in database, changes are tracked
 ```
 
 #### 4. Detached
+
 Object was persistent but session was closed.
+
 ```python
 db.close()
 # user is now Detached - exists in database but not tracked
@@ -679,6 +736,7 @@ db.close()
 ### Session Lifecycle
 
 #### Creating a Session
+
 ```python
 from sqlalchemy.orm import Session
 from database import engine
@@ -688,6 +746,7 @@ db = Session(bind=engine)
 ```
 
 #### Using Dependency Injection (FastAPI)
+
 ```python
 from database import get_db
 from fastapi import Depends
@@ -719,6 +778,7 @@ def get_db():
 ### Commit vs Flush vs Refresh
 
 #### commit()
+
 - Saves all changes to database permanently
 - Ends the current transaction
 - Makes changes visible to other sessions
@@ -730,6 +790,7 @@ db.commit()  # Permanent in database
 ```
 
 #### flush()
+
 - Sends SQL to database but doesn't commit
 - Stays in same transaction
 - Useful to get auto-generated IDs
@@ -743,6 +804,7 @@ db.commit()  # Now permanent
 ```
 
 #### refresh()
+
 - Reloads object from database
 - Discards in-memory changes
 - Gets latest database values
@@ -757,6 +819,7 @@ print(user.email)  # Original email, change discarded
 ### Common Patterns
 
 #### Pattern 1: Standard CRUD Operation
+
 ```python
 def create_user(user_data: dict, db: Session):
     user = User(**user_data)
@@ -767,6 +830,7 @@ def create_user(user_data: dict, db: Session):
 ```
 
 #### Pattern 2: Bulk Operations
+
 ```python
 def create_multiple_users(users_data: list, db: Session):
     users = [User(**data) for data in users_data]
@@ -776,30 +840,32 @@ def create_multiple_users(users_data: list, db: Session):
 ```
 
 #### Pattern 3: Update with Validation
+
 ```python
 def update_user(user_id: int, update_data: dict, db: Session):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return None
-    
+
     for key, value in update_data.items():
         setattr(user, key, value)
-    
+
     db.commit()
     db.refresh(user)
     return user
 ```
 
 #### Pattern 4: Conditional Commit
+
 ```python
 def toggle_user_status(user_id: str, db: Session):
     user = db.query(User).filter(User.id == user_id).first()
-    
+
     if user:
         user.is_active = not user.is_active
         db.commit()
         return True
-    
+
     # No commit if user not found
     return False
 ```
@@ -839,38 +905,38 @@ from database import SessionLocal
 def complete_user_workflow():
     # 1. Create session
     db = SessionLocal()
-    
+
     try:
         # 2. Create object (Transient)
         user = User(email="test@example.com")
         print(f"State: Transient")
-        
+
         # 3. Add to session (Pending)
         db.add(user)
         print(f"State: Pending, ID: {user.id}")  # ID is None
-        
+
         # 4. Flush (still Pending, but ID available)
         db.flush()
         print(f"State: Pending, ID: {user.id}")  # ID is set
-        
+
         # 5. Commit (Persistent)
         db.commit()
         print(f"State: Persistent, ID: {user.id}")
-        
+
         # 6. Modify object
         user.email = "updated@example.com"
         db.commit()
-        
+
         # 7. Refresh to get latest data
         db.refresh(user)
-        
+
         return user
-        
+
     except Exception as e:
         # Rollback on error
         db.rollback()
         raise e
-        
+
     finally:
         # 8. Close session (object becomes Detached)
         db.close()
@@ -882,6 +948,7 @@ def complete_user_workflow():
 ## Practice Assignment
 
 ### Objective
+
 Create a complete FastAPI application with advanced SQLAlchemy operations demonstrating joins, filtering, aggregations, and transaction management using the existing database schema.
 
 ### Current Database Schema
@@ -901,7 +968,7 @@ class User(Base):
     address = Column(String(200), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
-    
+
     # One-to-One relationship with UserProfile
     profile = relationship("UserProfile", back_populates="user", uselist=False)
 
@@ -914,7 +981,7 @@ class UserProfile(Base):
     city = Column(String(50), nullable=True)
     country = Column(String(50), nullable=True)
     postal_code = Column(String(20), nullable=True)
-    
+
     # Relationship back to User
     user = relationship("User", back_populates="profile")
 
@@ -927,9 +994,9 @@ class Product(Base):
     price = Column(Numeric(10, 2), nullable=False)
     tags = Column(ARRAY(String), nullable=True)  # PostgreSQL array
     extra_data = Column(JSONB, nullable=True)    # JSON data
-    
+
     # Many-to-Many relationship with RawMaterial
-    raw_materials = relationship("RawMaterial", secondary=product_raw_material_association, 
+    raw_materials = relationship("RawMaterial", secondary=product_raw_material_association,
                                 back_populates="products")
 
 # RawMaterial Model - stores raw materials
@@ -938,9 +1005,9 @@ class RawMaterial(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(100), nullable=False)
     quantity = Column(Float, nullable=False)
-    
+
     # Many-to-Many relationship with Product
-    products = relationship("Product", secondary=product_raw_material_association, 
+    products = relationship("Product", secondary=product_raw_material_association,
                            back_populates="raw_materials")
 
 # Association table for Product-RawMaterial many-to-many relationship
@@ -953,6 +1020,7 @@ product_raw_material_association = Table(
 ```
 
 ### Relationship Summary
+
 - **User ↔ UserProfile**: One-to-One (each user has one profile)
 - **Product ↔ RawMaterial**: Many-to-Many (products use many materials, materials used in many products)
 
@@ -978,7 +1046,8 @@ Create the following endpoints:
    - Show bidirectional relationship loading
 
 **Expected Code:**
-```python
+
+````python
 from sqlalchemy.orm import joinedload, selectinload
 
 @app.get("/users/{user_id}/complete")
@@ -1143,7 +1212,7 @@ def create_user_with_profile(user_data: dict, profile_data: dict, db: Session = 
 4. Complex aggregation queries working correctly
 5. Test file with at least 8 test cases covering all task=400, detail=str(e))DO: Aggregate by product and category
     pass
-```
+````
 
 #### Task 4: Transaction Management (15 minutes)
 
@@ -1168,6 +1237,7 @@ Create the following endpoints that require transaction handling:
    - Use flush() to get generated IDs
 
 **Expected Code:**
+
 ```python
 @app.post("/orders/create")
 def create_order(order_data: OrderCreate, db: Session = Depends(get_db)):
@@ -1236,30 +1306,35 @@ logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 ## Key Takeaways Summary
 
 ### Joins and Eager Loading
+
 - ✅ Use `joinedload()` for one-to-one relationships
 - ✅ Use `selectinload()` for one-to-many relationships
 - ✅ Always avoid N+1 query problems
 - ✅ Print SQL to verify query efficiency
 
 ### Filtering and Sorting
+
 - ✅ Use `filter()` for complex conditions
 - ✅ Combine `and_()`, `or_()`, `not_()` for logic
 - ✅ Use `order_by()` with `desc()` for sorting
 - ✅ Implement pagination with `limit()` and `offset()`
 
 ### Aggregations
+
 - ✅ Use `func.count()`, `func.sum()`, `func.avg()` for calculations
 - ✅ Group results with `group_by()`
 - ✅ Filter groups with `having()`
 - ✅ Combine multiple aggregations in one query
 
 ### Transaction Management
+
 - ✅ Always use try/except with commit/rollback
 - ✅ Keep transactions short and focused
 - ✅ Use `flush()` to get generated IDs without committing
 - ✅ Understand ACID properties
 
 ### Session Lifecycle
+
 - ✅ One session per request (use dependency injection)
 - ✅ Always close sessions (use `finally` or context managers)
 - ✅ Understand object states: Transient → Pending → Persistent → Detached
@@ -1270,11 +1345,13 @@ logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 ## Additional Resources
 
 ### Documentation
+
 - [SQLAlchemy ORM Tutorial](https://docs.sqlalchemy.org/en/20/orm/tutorial.html)
 - [SQLAlchemy Relationship Loading](https://docs.sqlalchemy.org/en/20/orm/loading_relationships.html)
 - [FastAPI SQL Databases](https://fastapi.tiangolo.com/tutorial/sql-databases/)
 
 ### Common Pitfalls to Avoid
+
 1. ❌ Not using eager loading (N+1 queries)
 2. ❌ Forgetting to commit transactions
 3. ❌ Sharing sessions across requests
@@ -1285,6 +1362,7 @@ logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 8. ❌ Not validating data before commit
 
 ### Performance Tips
+
 - Enable SQL query logging during development
 - Use `explain()` to analyze query plans
 - Add database indexes on frequently queried columns

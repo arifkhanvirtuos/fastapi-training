@@ -1,6 +1,7 @@
 # FastAPI Annotations: Complete One-Hour Lecture
 
 ## Table of Contents
+
 1. [Introduction (5 min)](#1-introduction)
 2. [Python Type Hints Basics (10 min)](#2-python-type-hints-basics)
 3. [Path Parameters (8 min)](#3-path-parameters)
@@ -17,6 +18,7 @@
 ### What are Annotations in FastAPI?
 
 Annotations in FastAPI are Python type hints that serve multiple purposes:
+
 - **Type checking**: Validate data types at runtime
 - **Automatic validation**: Convert and validate incoming data
 - **Documentation**: Auto-generate OpenAPI/Swagger docs
@@ -25,6 +27,7 @@ Annotations in FastAPI are Python type hints that serve multiple purposes:
 ### Why FastAPI Loves Annotations?
 
 FastAPI is built on top of:
+
 - **Pydantic**: Data validation using Python type annotations
 - **Starlette**: Web framework foundation
 - **Type hints**: Python 3.6+ feature
@@ -185,7 +188,7 @@ def get_model(model_name: ModelName):
     """Only accepts: alexnet, resnet, or lenet"""
     if model_name == ModelName.alexnet:
         return {"model": "AlexNet", "message": "Deep Learning FTW!"}
-    
+
     return {"model": model_name.value}
 ```
 
@@ -309,7 +312,7 @@ def create_item(item: Item):
     """
     POST /items/
     Body: {"name": "Laptop", "price": 999.99}
-    
+
     FastAPI automatically:
     1. Reads request body as JSON
     2. Validates against Item model
@@ -340,13 +343,13 @@ class User(BaseModel):
     age: int = Field(..., ge=0, le=150)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True
-    
+
     # Custom validator
     @validator('username')
     def username_alphanumeric(cls, v):
         assert v.isalnum() or '_' in v, 'must be alphanumeric'
         return v
-    
+
     # Config
     class Config:
         schema_extra = {

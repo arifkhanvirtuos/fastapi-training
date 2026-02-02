@@ -1,10 +1,11 @@
 # FastAPI Security Best Practices - 1 Hour Teaching Guide
 
 ## Session Overview (60 minutes)
+
 - **Introduction** (5 min): Security mindset and threat landscape
 - **Password Hashing** (20 min): Implementation with passlib and bcrypt
 - **Security Headers** (15 min): Middleware and header configuration
-- **HTTPS Configuration** (10 min): SSL/TLS setup and best practices  
+- **HTTPS Configuration** (10 min): SSL/TLS setup and best practices
 - **Common Vulnerabilities** (15 min): SQL injection, XSS with live examples
 - **Q&A and Practice** (5 min): Recap and hands-on exercise
 
@@ -13,14 +14,18 @@
 ## 1. Introduction: Security Mindset (5 minutes)
 
 ### The Threat Landscape
+
 When building web APIs, you're constantly under attack:
+
 - Bots scanning for vulnerabilities 24/7
 - Credential stuffing attacks using leaked passwords
 - Automated SQL injection and XSS attempts
 - Man-in-the-middle attacks on unencrypted connections
 
 ### Defense in Depth
+
 Security is about layers - if one fails, others protect you:
+
 1. **Authentication** - Who are you?
 2. **Authorization** - What can you do?
 3. **Encryption** - Protect data in transit and at rest
@@ -36,6 +41,7 @@ Security is about layers - if one fails, others protect you:
 ### Why Hash Passwords?
 
 **NEVER store passwords in plain text!** When your database is compromised:
+
 - Plain text = all accounts compromised immediately
 - Hashed passwords = attackers must crack each one individually
 
@@ -57,6 +63,7 @@ user.password = f.encrypt(b"mysecretpassword")
 ```
 
 **Why are these bad?**
+
 - MD5/SHA1 are too fast - attackers can try billions of passwords per second
 - No salt = rainbow tables can crack all passwords instantly
 - Encryption is reversible - if the key leaks, all passwords leak
@@ -64,6 +71,7 @@ user.password = f.encrypt(b"mysecretpassword")
 ### The Right Way: bcrypt with passlib
 
 **Install dependencies:**
+
 ```bash
 pip install passlib[bcrypt] python-multipart
 ```
@@ -92,13 +100,14 @@ def needs_rehash(hashed_password: str) -> bool:
 ### Complete FastAPI User Registration Example
 
 **models.py:**
+
 ```python
 from sqlalchemy import Column, Integer, String, Boolean
 from database import Base
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
@@ -107,6 +116,7 @@ class User(Base):
 ```
 
 **schemas.py:**
+
 ```python
 from pydantic import BaseModel, EmailStr, Field
 
@@ -120,12 +130,13 @@ class UserResponse(BaseModel):
     email: str
     username: str
     is_active: bool
-    
+
     class Config:
         from_attributes = True  # Allows Pydantic to work with SQLAlchemy models
 ```
 
 **main.py - Registration endpoint:**
+
 ```python
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -147,32 +158,32 @@ def get_db():
 @app.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user with hashed password."""
-    
+
     # Check if user already exists
     db_user = db.query(models.User).filter(
         (models.User.email == user.email) | (models.User.username == user.username)
     ).first()
-    
+
     if db_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email or username already registered"
         )
-    
+
     # Hash the password
     hashed_password = hash_password(user.password)
-    
+
     # Create new user
     db_user = models.User(
         email=user.email,
         username=user.username,
         hashed_password=hashed_password
     )
-    
+
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    
+
     return db_user
 ```
 
@@ -187,12 +198,12 @@ def login(
     db: Session = Depends(get_db)
 ):
     """Authenticate user and return token."""
-    
+
     # Find user by username
     user = db.query(models.User).filter(
         models.User.username == form_data.username
     ).first()
-    
+
     # Check user exists and password is correct
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -200,12 +211,12 @@ def login(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Optional: Check if password needs rehashing (algorithm updated)
     if needs_rehash(user.hashed_password):
         user.hashed_password = hash_password(form_data.password)
         db.commit()
-    
+
     # TODO: Create and return JWT token (covered in authentication lecture)
     return {"access_token": "token_here", "token_type": "bearer"}
 ```
@@ -215,7 +226,6 @@ def login(
 1. **Salt Generation**: Random salt added to each password
    - User A password "hello123" → hash1
    - User B password "hello123" → hash2 (different!)
-   
 2. **Work Factor**: Configurable rounds make hashing intentionally slow
    - Default: 12 rounds = ~300ms per hash
    - Attackers can only try ~3 passwords per second
@@ -233,18 +243,19 @@ HTTP headers that tell browsers how to behave securely with your site.
 
 ### Critical Security Headers
 
-| Header | Purpose | Example |
-|--------|---------|---------|
-| `Content-Security-Policy` | Prevent XSS by controlling resource sources | `default-src 'self'` |
-| `Strict-Transport-Security` | Force HTTPS connections | `max-age=31536000; includeSubDomains` |
-| `X-Content-Type-Options` | Prevent MIME sniffing attacks | `nosniff` |
-| `X-Frame-Options` | Prevent clickjacking | `DENY` or `SAMEORIGIN` |
-| `X-XSS-Protection` | Enable browser XSS filter (legacy) | `1; mode=block` |
-| `Referrer-Policy` | Control referrer information | `strict-origin-when-cross-origin` |
+| Header                      | Purpose                                     | Example                               |
+| --------------------------- | ------------------------------------------- | ------------------------------------- |
+| `Content-Security-Policy`   | Prevent XSS by controlling resource sources | `default-src 'self'`                  |
+| `Strict-Transport-Security` | Force HTTPS connections                     | `max-age=31536000; includeSubDomains` |
+| `X-Content-Type-Options`    | Prevent MIME sniffing attacks               | `nosniff`                             |
+| `X-Frame-Options`           | Prevent clickjacking                        | `DENY` or `SAMEORIGIN`                |
+| `X-XSS-Protection`          | Enable browser XSS filter (legacy)          | `1; mode=block`                       |
+| `Referrer-Policy`           | Control referrer information                | `strict-origin-when-cross-origin`     |
 
 ### Implementation: Custom Middleware
 
 **middleware/security.py:**
+
 ```python
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -253,13 +264,13 @@ from starlette.responses import Response
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        
+
         # Security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        
+
         # Content Security Policy - adjust based on your needs
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -270,21 +281,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "connect-src 'self'; "
             "frame-ancestors 'none';"
         )
-        
+
         # Referrer Policy
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        
+
         # Permissions Policy (formerly Feature Policy)
         response.headers["Permissions-Policy"] = (
             "geolocation=(), "
             "microphone=(), "
             "camera=()"
         )
-        
+
         return response
 ```
 
 **Add to main.py:**
+
 ```python
 from middleware.security import SecurityHeadersMiddleware
 
@@ -306,7 +318,7 @@ app.add_middleware(HTTPSRedirectMiddleware)
 
 # Prevent host header attacks
 app.add_middleware(
-    TrustedHostMiddleware, 
+    TrustedHostMiddleware,
     allowed_hosts=["yourdomain.com", "*.yourdomain.com"]
 )
 
@@ -324,11 +336,13 @@ app.add_middleware(
 ### Testing Your Headers
 
 Test with curl:
+
 ```bash
 curl -I http://localhost:8000/api/users
 ```
 
 Or use online tools:
+
 - https://securityheaders.com
 - https://observatory.mozilla.org
 
@@ -339,6 +353,7 @@ Or use online tools:
 ### Why HTTPS Matters
 
 **Without HTTPS:**
+
 - Passwords sent in plain text over the network
 - Session tokens can be stolen (session hijacking)
 - Man-in-the-middle attacks can modify responses
@@ -347,6 +362,7 @@ Or use online tools:
 ### Local Development with Self-Signed Certificates
 
 **Generate self-signed certificate:**
+
 ```bash
 # Create private key and certificate
 openssl req -x509 -newkey rsa:4096 -nodes \
@@ -357,6 +373,7 @@ openssl req -x509 -newkey rsa:4096 -nodes \
 ```
 
 **Run FastAPI with HTTPS:**
+
 ```python
 # main.py
 import uvicorn
@@ -373,6 +390,7 @@ if __name__ == "__main__":
 ```
 
 Or from command line:
+
 ```bash
 uvicorn main:app --ssl-keyfile=./key.pem --ssl-certfile=./cert.pem --port 8443
 ```
@@ -387,18 +405,18 @@ Use Nginx or Caddy to handle HTTPS:
 server {
     listen 443 ssl http2;
     server_name yourdomain.com;
-    
+
     ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-    
+
     # Modern SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
     ssl_prefer_server_ciphers off;
-    
+
     # HSTS
     add_header Strict-Transport-Security "max-age=63072000" always;
-    
+
     location / {
         proxy_pass http://localhost:8000;
         proxy_set_header Host $host;
@@ -417,6 +435,7 @@ server {
 ```
 
 **Option 2: Let's Encrypt with Certbot**
+
 ```bash
 # Install certbot
 sudo apt-get install certbot python3-certbot-nginx
@@ -448,6 +467,7 @@ sudo certbot renew --dry-run
 Attackers inject malicious SQL code through user input to manipulate your database.
 
 **Vulnerable Code (NEVER do this!):**
+
 ```python
 @app.get("/user/{username}")
 def get_user_vulnerable(username: str, db: Session = Depends(get_db)):
@@ -466,6 +486,7 @@ def get_user_vulnerable(username: str, db: Session = Depends(get_db)):
 ```
 
 **Safe Code with SQLAlchemy ORM:**
+
 ```python
 @app.get("/user/{username}")
 def get_user_safe(username: str, db: Session = Depends(get_db)):
@@ -473,14 +494,15 @@ def get_user_safe(username: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(
         models.User.username == username
     ).first()
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return user
 ```
 
 **Safe Code with Raw SQL (if needed):**
+
 ```python
 from sqlalchemy import text
 
@@ -489,7 +511,7 @@ def search_users(keyword: str, db: Session = Depends(get_db)):
     # ✅ SAFE! Using parameterized queries
     query = text("SELECT * FROM users WHERE username LIKE :keyword")
     result = db.execute(query, {"keyword": f"%{keyword}%"})
-    
+
     return result.fetchall()
 ```
 
@@ -501,11 +523,13 @@ def search_users(keyword: str, db: Session = Depends(get_db)):
 Attackers inject malicious JavaScript into your site that runs in other users' browsers.
 
 **Types of XSS:**
+
 1. **Stored XSS**: Malicious code saved in database
 2. **Reflected XSS**: Malicious code in URL parameters
 3. **DOM-based XSS**: Client-side JavaScript vulnerability
 
 **Vulnerable Example:**
+
 ```python
 from fastapi.responses import HTMLResponse
 
@@ -527,6 +551,7 @@ def get_profile_vulnerable(username: str):
 ```
 
 **Safe Code with Jinja2 Templates:**
+
 ```python
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
@@ -536,10 +561,10 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/profile/{username}", response_class=HTMLResponse)
 def get_profile_safe(request: Request, username: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == username).first()
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # ✅ SAFE! Jinja2 auto-escapes HTML by default
     return templates.TemplateResponse(
         "profile.html",
@@ -548,23 +573,25 @@ def get_profile_safe(request: Request, username: str, db: Session = Depends(get_
 ```
 
 **templates/profile.html:**
+
 ```html
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <title>User Profile</title>
-</head>
-<body>
+  </head>
+  <body>
     <!-- Jinja2 automatically escapes {{ user.username }} -->
     <h1>Welcome {{ user.username }}!</h1>
-    
+
     <!-- If you REALLY need raw HTML (be careful!): -->
     <!-- {{ user.bio | safe }} -->
-</body>
+  </body>
 </html>
 ```
 
 **Additional XSS Protection:**
+
 ```python
 from pydantic import BaseModel, validator
 import html
@@ -572,12 +599,12 @@ import html
 class UserCreate(BaseModel):
     username: str
     bio: str
-    
+
     @validator('bio')
     def sanitize_bio(cls, v):
         # Escape HTML entities
         return html.escape(v)
-    
+
     @validator('username')
     def validate_username(cls, v):
         # Only allow alphanumeric and underscores
@@ -589,6 +616,7 @@ class UserCreate(BaseModel):
 ### C. Other Critical Vulnerabilities
 
 **1. Insecure Direct Object References (IDOR)**
+
 ```python
 # ❌ VULNERABLE: Anyone can access any user's data
 @app.get("/user/{user_id}/orders")
@@ -606,12 +634,13 @@ def get_orders(
     # Verify user can only access their own orders
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     orders = db.query(models.Order).filter(models.Order.user_id == user_id).all()
     return orders
 ```
 
 **2. Mass Assignment**
+
 ```python
 # ❌ VULNERABLE: User could set is_admin=True
 @app.put("/user/{user_id}")
@@ -635,17 +664,18 @@ def update_user(
     db: Session = Depends(get_db)
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    
+
     # Only update provided fields
     update_data = user_data.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(user, field, value)
-    
+
     db.commit()
     return user
 ```
 
 **3. Rate Limiting (Brute Force Protection)**
+
 ```python
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -673,29 +703,34 @@ def login(
 ### Before Going to Production:
 
 **Authentication & Authorization:**
+
 - ✅ Passwords hashed with bcrypt (or Argon2)
 - ✅ JWT tokens with reasonable expiry
 - ✅ Implement proper RBAC (Role-Based Access Control)
 - ✅ Rate limiting on authentication endpoints
 
 **Data Protection:**
+
 - ✅ All database queries use ORM or parameterized queries
 - ✅ Input validation with Pydantic models
 - ✅ Output encoding (Jinja2 auto-escape)
 - ✅ Secrets in environment variables, not code
 
 **Transport Security:**
+
 - ✅ HTTPS everywhere (TLS 1.2+)
 - ✅ HSTS header enabled
 - ✅ Secure cookie flags: HttpOnly, Secure, SameSite
 
 **Headers & Middleware:**
+
 - ✅ Content-Security-Policy configured
 - ✅ X-Frame-Options set
-- ✅ CORS properly configured (not "*")
+- ✅ CORS properly configured (not "\*")
 - ✅ Security headers middleware active
 
 **Testing:**
+
 - ✅ Run OWASP ZAP or similar scanner
 - ✅ Check SSL Labs score (A or A+)
 - ✅ Verify security headers (securityheaders.com)
@@ -718,18 +753,19 @@ app = FastAPI()
 def login(username: str, password: str):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    
+
     # Find issues and fix them!
     query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
     cursor.execute(query)
     user = cursor.fetchone()
-    
+
     if user:
         return HTMLResponse(f"<h1>Welcome back, {username}!</h1>")
     return {"error": "Invalid credentials"}
 ```
 
 **Issues to fix:**
+
 1. SQL injection vulnerability
 2. Plain text password storage/comparison
 3. XSS vulnerability in HTML response
