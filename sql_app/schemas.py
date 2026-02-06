@@ -42,6 +42,7 @@ class UserCreate(UserBase):
     role: UserRole = UserRole.USER
     
     class Config:
+        use_enum_values = True  # Use enum values ("user") instead of names ("USER")
         json_schema_extra = {
             "example": {
                 "email": "user@example.com",
@@ -78,6 +79,7 @@ class UserResponse(UserBase):
     
     class Config:
         from_attributes = True
+        use_enum_values = True  # Use enum values ("user") instead of names ("USER")
         json_schema_extra = {
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",

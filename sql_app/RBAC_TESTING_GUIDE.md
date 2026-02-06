@@ -28,6 +28,7 @@ Open your browser: `http://localhost:8000/docs`
 ### Scenario 1: Create Users with Different Roles
 
 #### 1.1 Create a Regular User
+
 ```bash
 curl -X POST "http://localhost:8000/register" \
   -H "Content-Type: application/json" \
@@ -40,6 +41,7 @@ curl -X POST "http://localhost:8000/register" \
 ```
 
 #### 1.2 Create a Manager
+
 ```bash
 curl -X POST "http://localhost:8000/register" \
   -H "Content-Type: application/json" \
@@ -52,6 +54,7 @@ curl -X POST "http://localhost:8000/register" \
 ```
 
 #### 1.3 Create an Admin
+
 ```bash
 curl -X POST "http://localhost:8000/register" \
   -H "Content-Type: application/json" \
@@ -64,6 +67,7 @@ curl -X POST "http://localhost:8000/register" \
 ```
 
 #### 1.4 Create a Guest
+
 ```bash
 curl -X POST "http://localhost:8000/register" \
   -H "Content-Type: application/json" \
@@ -80,6 +84,7 @@ curl -X POST "http://localhost:8000/register" \
 ### Scenario 2: Login and Get Tokens
 
 #### 2.1 Login as Regular User
+
 ```bash
 curl -X POST "http://localhost:8000/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -89,6 +94,7 @@ curl -X POST "http://localhost:8000/token" \
 **Save the access_token from the response!**
 
 #### 2.2 Login as Manager
+
 ```bash
 curl -X POST "http://localhost:8000/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -96,6 +102,7 @@ curl -X POST "http://localhost:8000/token" \
 ```
 
 #### 2.3 Login as Admin
+
 ```bash
 curl -X POST "http://localhost:8000/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -111,24 +118,28 @@ Replace `<TOKEN>` with the actual token you received from login.
 #### 3.1 Test Regular User Access
 
 **✅ Should work - View own profile:**
+
 ```bash
 curl -X GET "http://localhost:8000/my-profile" \
   -H "Authorization: Bearer <USER_TOKEN>"
 ```
 
 **✅ Should work - Check permissions:**
+
 ```bash
 curl -X GET "http://localhost:8000/permissions/check" \
   -H "Authorization: Bearer <USER_TOKEN>"
 ```
 
 **❌ Should fail (403 Forbidden) - List all users:**
+
 ```bash
 curl -X GET "http://localhost:8000/admin/users" \
   -H "Authorization: Bearer <USER_TOKEN>"
 ```
 
 **Expected response:**
+
 ```json
 {
   "detail": "Admin access required"
@@ -138,24 +149,28 @@ curl -X GET "http://localhost:8000/admin/users" \
 #### 3.2 Test Manager Access
 
 **✅ Should work - View user statistics:**
+
 ```bash
 curl -X GET "http://localhost:8000/reports/user-statistics" \
   -H "Authorization: Bearer <MANAGER_TOKEN>"
 ```
 
 **✅ Should work - Activate a user:**
+
 ```bash
 curl -X POST "http://localhost:8000/admin/users/<USER_ID>/activate" \
   -H "Authorization: Bearer <MANAGER_TOKEN>"
 ```
 
 **❌ Should fail (403 Forbidden) - Delete user:**
+
 ```bash
 curl -X DELETE "http://localhost:8000/admin/users/<USER_ID>" \
   -H "Authorization: Bearer <MANAGER_TOKEN>"
 ```
 
 **Expected response:**
+
 ```json
 {
   "detail": "Permission denied. Required: delete:users"
@@ -165,24 +180,28 @@ curl -X DELETE "http://localhost:8000/admin/users/<USER_ID>" \
 #### 3.3 Test Admin Access
 
 **✅ Should work - List all users:**
+
 ```bash
 curl -X GET "http://localhost:8000/admin/users" \
   -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
 **✅ Should work - Delete a user:**
+
 ```bash
 curl -X DELETE "http://localhost:8000/admin/users/<USER_ID>" \
   -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
 **✅ Should work - Change user role:**
+
 ```bash
 curl -X PUT "http://localhost:8000/admin/users/<USER_ID>/role?new_role=manager" \
   -H "Authorization: Bearer <ADMIN_TOKEN>"
 ```
 
 **✅ Should work - Create new admin:**
+
 ```bash
 curl -X POST "http://localhost:8000/admin/create-admin" \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
@@ -203,12 +222,14 @@ curl -X POST "http://localhost:8000/admin/create-admin" \
 **Get two user IDs first, then:**
 
 **❌ User A tries to view User B's profile (should fail):**
+
 ```bash
 curl -X GET "http://localhost:8000/users/<USER_B_ID>/profile" \
   -H "Authorization: Bearer <USER_A_TOKEN>"
 ```
 
 **Expected response:**
+
 ```json
 {
   "detail": "You can only access your own profile"
@@ -218,6 +239,7 @@ curl -X GET "http://localhost:8000/users/<USER_B_ID>/profile" \
 #### 4.2 Admin Can Access Any Profile
 
 **✅ Admin views any user's profile (should work):**
+
 ```bash
 curl -X GET "http://localhost:8000/users/<ANY_USER_ID>/profile" \
   -H "Authorization: Bearer <ADMIN_TOKEN>"
@@ -246,38 +268,42 @@ curl -X GET "http://localhost:8000/users/<ANY_USER_ID>/profile" \
 
 ## Permission Matrix
 
-| Endpoint | Guest | User | Manager | Admin |
-|----------|-------|------|---------|-------|
-| GET /my-profile | ✅ | ✅ | ✅ | ✅ |
-| GET /permissions/check | ✅ | ✅ | ✅ | ✅ |
-| GET /users/{id}/profile (own) | ✅ | ✅ | ✅ | ✅ |
-| GET /users/{id}/profile (other) | ❌ | ❌ | ✅ | ✅ |
-| GET /admin/users | ❌ | ❌ | ❌ | ✅ |
-| GET /reports/user-statistics | ❌ | ❌ | ✅ | ✅ |
-| POST /admin/users/{id}/activate | ❌ | ❌ | ✅ | ✅ |
-| POST /admin/users/{id}/deactivate | ❌ | ❌ | ✅ | ✅ |
-| PUT /admin/users/{id}/role | ❌ | ❌ | ❌ | ✅ |
-| DELETE /admin/users/{id} | ❌ | ❌ | ❌ | ✅ |
-| POST /admin/create-admin | ❌ | ❌ | ❌ | ✅ |
+| Endpoint                          | Guest | User | Manager | Admin |
+| --------------------------------- | ----- | ---- | ------- | ----- |
+| GET /my-profile                   | ✅    | ✅   | ✅      | ✅    |
+| GET /permissions/check            | ✅    | ✅   | ✅      | ✅    |
+| GET /users/{id}/profile (own)     | ✅    | ✅   | ✅      | ✅    |
+| GET /users/{id}/profile (other)   | ❌    | ❌   | ✅      | ✅    |
+| GET /admin/users                  | ❌    | ❌   | ❌      | ✅    |
+| GET /reports/user-statistics      | ❌    | ❌   | ✅      | ✅    |
+| POST /admin/users/{id}/activate   | ❌    | ❌   | ✅      | ✅    |
+| POST /admin/users/{id}/deactivate | ❌    | ❌   | ✅      | ✅    |
+| PUT /admin/users/{id}/role        | ❌    | ❌   | ❌      | ✅    |
+| DELETE /admin/users/{id}          | ❌    | ❌   | ❌      | ✅    |
+| POST /admin/create-admin          | ❌    | ❌   | ❌      | ✅    |
 
 ---
 
 ## Expected Errors
 
 ### 401 Unauthorized
+
 ```json
 {
   "detail": "Could not validate credentials"
 }
 ```
+
 **Cause:** No token provided or invalid token
 
 ### 403 Forbidden
+
 ```json
 {
   "detail": "Admin access required"
 }
 ```
+
 **Cause:** User doesn't have required role
 
 ```json
@@ -285,6 +311,7 @@ curl -X GET "http://localhost:8000/users/<ANY_USER_ID>/profile" \
   "detail": "Permission denied. Required: delete:users"
 }
 ```
+
 **Cause:** User doesn't have required permission
 
 ---
@@ -307,15 +334,19 @@ curl -X GET "http://localhost:8000/users/<ANY_USER_ID>/profile" \
 ## Troubleshooting
 
 ### Issue: "Column 'role' does not exist"
+
 **Solution:** Run the migration:
+
 ```bash
 /Users/virtuosdigital/Arif/fastapilearning/venv/bin/python -m alembic upgrade head
 ```
 
 ### Issue: All roles work the same
+
 **Solution:** Check that you're using the correct token for each user
 
 ### Issue: Import errors
+
 **Solution:** Make sure all imports are correct in models.py, auth.py, schemas.py
 
 ---

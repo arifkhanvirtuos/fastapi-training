@@ -3,18 +3,21 @@
 ## Duration: 1 Hour
 
 ## Topics Covered
+
 - OAuth2PasswordBearer
-- OAuth2PasswordRequestForm  
+- OAuth2PasswordRequestForm
 - FastAPI security utilities
 - Token endpoint standards
 - Integration with Swagger UI
 
 ## Key Takeaways
+
 Learn how to implement OAuth2-compliant authentication in FastAPI that seamlessly integrates with Swagger UI's "Authorize" button and follows industry standards.
 
 ---
 
 ## Table of Contents
+
 1. [Introduction to OAuth2](#introduction-to-oauth2)
 2. [Architecture Overview](#architecture-overview)
 3. [Implementation Guide](#implementation-guide)
@@ -92,6 +95,7 @@ pip install -r requirements.txt
 ```
 
 **Required packages** (added to requirements.txt):
+
 - `python-jose[cryptography]` - JWT token creation/validation
 - `passlib[bcrypt]` - Password hashing
 - `python-multipart` - Form data parsing (required for OAuth2PasswordRequestForm)
@@ -110,17 +114,19 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 **Key Functions:**
 
 1. **Password Hashing**
+
    ```python
    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-   
+
    def get_password_hash(password: str) -> str:
        return pwd_context.hash(password)
-   
+
    def verify_password(plain_password: str, hashed_password: str) -> bool:
        return pwd_context.verify(plain_password, hashed_password)
    ```
 
 2. **Token Creation**
+
    ```python
    def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
        to_encode = data.copy()
@@ -168,11 +174,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 ```
 
 **What it does:**
+
 - Automatically extracts the token from the `Authorization: Bearer <token>` header
 - Provides the "Authorize" button in Swagger UI
 - Points to the `/token` endpoint for authentication
 
 **Usage in endpoints:**
+
 ```python
 async def protected_endpoint(token: str = Depends(oauth2_scheme)):
     # token is automatically extracted from Authorization header
@@ -194,6 +202,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 **Important:** OAuth2 standard uses `username` field, but you can use it for email!
 
 **Form fields:**
+
 - `username` (string) - Use this for email
 - `password` (string) - User's password
 - `scope` (string) - Optional space-separated scopes
@@ -211,18 +220,18 @@ async def login_for_access_token(
 ):
     # 1. Authenticate user
     user = authenticate_user(db, form_data.username, form_data.password)
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # 2. Create tokens
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
-    
+
     # 3. Return OAuth2 compliant response
     return {
         "access_token": access_token,
@@ -232,6 +241,7 @@ async def login_for_access_token(
 ```
 
 **Why this format?**
+
 - `access_token`: The JWT token for API access
 - `token_type`: Must be "bearer" (lowercase) per OAuth2 spec
 - `refresh_token`: Optional, for getting new access tokens
@@ -245,6 +255,7 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 ```
 
 **Dependency chain:**
+
 1. `oauth2_scheme` extracts token from Authorization header
 2. `get_current_user` validates token and fetches user from database
 3. `get_current_active_user` checks if user is active
@@ -257,9 +268,11 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 ### How the "Authorize" Button Works
 
 1. **Configuration in OAuth2PasswordBearer**
+
    ```python
    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
    ```
+
    The `tokenUrl` parameter tells Swagger where to send login credentials.
 
 2. **User Experience:**
@@ -276,12 +289,14 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 ### Testing with Swagger UI
 
 1. **Start the server:**
+
    ```bash
    cd sql_app
    uvicorn main:app --reload
    ```
 
 2. **Open Swagger UI:**
+
    ```
    http://localhost:8000/docs
    ```
@@ -318,6 +333,7 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 ### Using cURL
 
 #### 1. Register a user
+
 ```bash
 curl -X POST "http://localhost:8000/register" \
   -H "Content-Type: application/json" \
@@ -330,6 +346,7 @@ curl -X POST "http://localhost:8000/register" \
 ```
 
 **Response:**
+
 ```json
 {
   "message": "User registered successfully. User ID: 550e8400-e29b-41d4-a716-446655440000"
@@ -337,6 +354,7 @@ curl -X POST "http://localhost:8000/register" \
 ```
 
 #### 2. Login (Get Token)
+
 ```bash
 curl -X POST "http://localhost:8000/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -344,6 +362,7 @@ curl -X POST "http://localhost:8000/token" \
 ```
 
 **Response:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJleHAiOjE3MDYxMjM0NTYsInR5cGUiOiJhY2Nlc3MifQ.signature",
@@ -353,12 +372,14 @@ curl -X POST "http://localhost:8000/token" \
 ```
 
 #### 3. Access Protected Endpoint
+
 ```bash
 curl -X GET "http://localhost:8000/users/me" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 **Response:**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -370,6 +391,7 @@ curl -X GET "http://localhost:8000/users/me" \
 ```
 
 #### 4. Refresh Token
+
 ```bash
 curl -X POST "http://localhost:8000/refresh" \
   -H "Content-Type: application/json" \
@@ -379,6 +401,7 @@ curl -X POST "http://localhost:8000/refresh" \
 ```
 
 **Response:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.new_token...",
@@ -436,11 +459,13 @@ print(response.json())
 ### 1. Secret Key Management
 
 **❌ Bad:**
+
 ```python
 SECRET_KEY = "my-secret-key"  # Hardcoded in source code
 ```
 
 **✅ Good:**
+
 ```python
 import os
 from dotenv import load_dotenv
@@ -452,6 +477,7 @@ if not SECRET_KEY:
 ```
 
 **Create .env file:**
+
 ```bash
 SECRET_KEY=your-super-secret-key-change-this-in-production
 DATABASE_URL=postgresql://user:pass@localhost/dbname
@@ -468,6 +494,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7  # 7 days
 ```
 
 **Why?**
+
 - Access tokens are used frequently → shorter expiration reduces risk
 - Refresh tokens are used rarely → can have longer expiration
 
@@ -479,7 +506,7 @@ from pydantic import validator, BaseModel
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    
+
     @validator('password')
     def password_strength(cls, v):
         if len(v) < 8:
@@ -494,6 +521,7 @@ class UserCreate(BaseModel):
 ### 4. HTTPS in Production
 
 **Always use HTTPS in production:**
+
 - Tokens are sent in Authorization header
 - Without HTTPS, tokens can be intercepted
 - Use Let's Encrypt for free SSL certificates
@@ -578,16 +606,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 #### Evaluation Criteria:
 
-| Criteria | Points |
-|----------|--------|
-| OAuth2PasswordBearer integration | 20 |
-| OAuth2PasswordRequestForm usage | 15 |
-| Proper token creation/validation | 20 |
-| Password hashing | 10 |
-| Swagger UI "Authorize" button works | 15 |
-| Protected endpoints function correctly | 15 |
-| Error handling (401, 403) | 5 |
-| **Total** | **100** |
+| Criteria                               | Points  |
+| -------------------------------------- | ------- |
+| OAuth2PasswordBearer integration       | 20      |
+| OAuth2PasswordRequestForm usage        | 15      |
+| Proper token creation/validation       | 20      |
+| Password hashing                       | 10      |
+| Swagger UI "Authorize" button works    | 15      |
+| Protected endpoints function correctly | 15      |
+| Error handling (401, 403)              | 5       |
+| **Total**                              | **100** |
 
 ---
 
@@ -596,6 +624,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 ### Issue 1: "Not authenticated" error in Swagger
 
 **Symptoms:**
+
 ```json
 {
   "detail": "Not authenticated"
@@ -603,6 +632,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 ```
 
 **Solutions:**
+
 1. Make sure you clicked "Authorize" button
 2. Check that tokenUrl matches your endpoint
 3. Verify token is being sent: Check browser DevTools → Network → Headers
@@ -610,11 +640,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 ### Issue 2: OAuth2PasswordRequestForm not working
 
 **Error:**
+
 ```
 ImportError: cannot import name 'OAuth2PasswordRequestForm'
 ```
 
 **Solution:**
+
 ```bash
 pip install python-multipart
 ```
@@ -622,6 +654,7 @@ pip install python-multipart
 ### Issue 3: Token validation fails
 
 **Error:**
+
 ```json
 {
   "detail": "Could not validate credentials"
@@ -629,6 +662,7 @@ pip install python-multipart
 ```
 
 **Check:**
+
 1. SECRET_KEY matches between token creation and validation
 2. Token hasn't expired (check `exp` claim)
 3. Token structure is correct (should have 3 parts separated by dots)
@@ -636,11 +670,13 @@ pip install python-multipart
 ### Issue 4: Password hashing error
 
 **Error:**
+
 ```
 ValueError: Invalid salt
 ```
 
 **Solution:**
+
 ```bash
 pip install passlib[bcrypt]
 ```
@@ -650,16 +686,19 @@ pip install passlib[bcrypt]
 ## Additional Resources
 
 ### Official Documentation
+
 - [FastAPI Security](https://fastapi.tiangolo.com/tutorial/security/)
 - [OAuth2 with Password (and hashing), Bearer with JWT tokens](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
 - [OAuth2 RFC Specification](https://tools.ietf.org/html/rfc6749)
 
 ### Libraries
+
 - [python-jose](https://python-jose.readthedocs.io/) - JWT implementation
 - [passlib](https://passlib.readthedocs.io/) - Password hashing
 - [FastAPI Security Utilities](https://fastapi.tiangolo.com/tutorial/security/first-steps/)
 
 ### Video Tutorials
+
 - FastAPI Official Tutorial on YouTube
 - OAuth2 Explained (by OktaDev)
 

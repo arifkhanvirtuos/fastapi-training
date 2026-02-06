@@ -48,29 +48,32 @@
 
 ## New OAuth2 Endpoints
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/token` | Login & get tokens (OAuth2 standard) | No |
-| POST | `/register` | Register new user | No |
-| POST | `/refresh` | Refresh access token | No |
-| GET | `/users/me` | Get current user info | Yes |
-| PUT | `/users/me` | Update current user | Yes |
-| GET | `/protected/data` | Example protected endpoint | Yes |
+| Method | Endpoint          | Description                          | Auth Required |
+| ------ | ----------------- | ------------------------------------ | ------------- |
+| POST   | `/token`          | Login & get tokens (OAuth2 standard) | No            |
+| POST   | `/register`       | Register new user                    | No            |
+| POST   | `/refresh`        | Refresh access token                 | No            |
+| GET    | `/users/me`       | Get current user info                | Yes           |
+| PUT    | `/users/me`       | Update current user                  | Yes           |
+| GET    | `/protected/data` | Example protected endpoint           | Yes           |
 
 ## Quick Start
 
 ### 1. Install Dependencies
+
 ```bash
 cd sql_app
 pip install -r requirements.txt
 ```
 
 ### 2. Start the Server
+
 ```bash
 uvicorn main:app --reload
 ```
 
 ### 3. Access Swagger UI
+
 ```
 http://localhost:8000/docs
 ```
@@ -78,38 +81,45 @@ http://localhost:8000/docs
 ### 4. Test the Flow
 
 **Step 1: Register a user**
+
 - Go to `POST /register`
 - Enter email, password, name
 
 **Step 2: Login via Swagger**
+
 - Click the "Authorize" 🔒 button (top right)
 - Username: your-email@example.com
 - Password: your-password
 - Click "Authorize"
 
 **Step 3: Access protected endpoints**
+
 - Try `GET /users/me`
 - You should see your user data!
 
 ## Key Features
 
 ### ✅ OAuth2 Compliant
+
 - Standard OAuth2 password flow
 - Proper token response format
 - Bearer token authentication
 
 ### ✅ Swagger UI Integration
+
 - Automatic "Authorize" button
 - No manual token copy-pasting
 - Interactive API testing
 
 ### ✅ Security
+
 - Bcrypt password hashing
 - JWT tokens with expiration
 - Access & refresh tokens
 - Active user verification
 
 ### ✅ Developer Experience
+
 - Type hints everywhere
 - Pydantic validation
 - Clear error messages
@@ -138,6 +148,7 @@ http://localhost:8000/docs
 ## Environment Variables (Recommended)
 
 Create `.env` file:
+
 ```env
 SECRET_KEY=your-super-secret-key-change-this
 DATABASE_URL=postgresql://user:pass@localhost/dbname
@@ -146,6 +157,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
 Update `auth.py`:
+
 ```python
 from dotenv import load_dotenv
 import os
@@ -157,6 +169,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "fallback-for-dev")
 ## Testing with cURL
 
 **Register:**
+
 ```bash
 curl -X POST http://localhost:8000/register \
   -H "Content-Type: application/json" \
@@ -164,12 +177,14 @@ curl -X POST http://localhost:8000/register \
 ```
 
 **Login:**
+
 ```bash
 curl -X POST http://localhost:8000/token \
   -d "username=test@example.com&password=pass123"
 ```
 
 **Access Protected:**
+
 ```bash
 curl http://localhost:8000/users/me \
   -H "Authorization: Bearer <your-token-here>"
@@ -177,14 +192,14 @@ curl http://localhost:8000/users/me \
 
 ## What's Different from Before?
 
-| Before | After (OAuth2) |
-|--------|----------------|
-| Custom token header | Standard `Authorization: Bearer` |
-| Manual token handling | Automatic extraction via `OAuth2PasswordBearer` |
-| No Swagger integration | Full Swagger "Authorize" button |
-| Plain JSON login | OAuth2PasswordRequestForm |
-| Scattered auth logic | Centralized in `auth.py` |
-| No password hashing | Bcrypt hashing |
+| Before                 | After (OAuth2)                                  |
+| ---------------------- | ----------------------------------------------- |
+| Custom token header    | Standard `Authorization: Bearer`                |
+| Manual token handling  | Automatic extraction via `OAuth2PasswordBearer` |
+| No Swagger integration | Full Swagger "Authorize" button                 |
+| Plain JSON login       | OAuth2PasswordRequestForm                       |
+| Scattered auth logic   | Centralized in `auth.py`                        |
+| No password hashing    | Bcrypt hashing                                  |
 
 ## Next Steps
 

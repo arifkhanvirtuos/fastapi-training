@@ -1,7 +1,7 @@
-from typing import Union, Optional
+from typing import Union, Optional, List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, Header, Request, Response, status, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Depends, HTTPException, Header, Request, Response, status, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from database import get_db, init_db
 from pydantic import BaseModel, EmailStr, ValidationError
@@ -19,7 +19,9 @@ import os
 import bcrypt
 import uuid
 import time
-from jose import jwt
+import json
+import asyncio
+from jose import jwt, JWTError
 from datetime import timedelta, datetime, timezone
 
 # Import OAuth2 authentication utilities
@@ -252,22 +254,8 @@ def delete_item(item_id: int):
 
 
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    full_name: Union[str, None] = None
-    phone_number: Union[str, None] = None
+# UserCreate and UserResponse are imported from schemas.py - don't redefine them here
 
-
-class UserResponse(BaseModel):
-    id: uuid.UUID
-    email: EmailStr
-    full_name: Union[str, None] = None
-    phone_number: Union[str, None] = None
-    is_active: bool
-
-    class Config:
-        from_attributes = True  
 
 class ErrorResponse(BaseModel):
     error: str
@@ -1270,3 +1258,1706 @@ async def create_admin_user(
 #         "access_token": new_access_token,
 #         "token_type": "bearer"
 #     }
+
+# ============================================================================
+# WEBSOCKET IMPLEMENTATION
+# ============================================================================
+
+# WebSocket Connection Manager for handling multiple concurrent connections
+class ConnectionManager:
+    """
+    Manages WebSocket connections for real-time communication.
+    Supports broadcasting messages to all connected clients.
+    """
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        self.client_info: dict = {}  # Store client metadata
+
+    async def connect(self, websocket: WebSocket, client_id: str = None):
+        """Accept WebSocket connection and add to active connections"""
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        
+        if client_id:
+            self.client_info[id(websocket)] = {
+                "client_id": client_id,
+                "connected_at": datetime.now(timezone.utc).isoformat()
+            }
+        
+        print(f"✅ WebSocket connected. Total connections: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        """Remove WebSocket from active connections"""
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            
+            # Clean up client info
+            ws_id = id(websocket)
+            if ws_id in self.client_info:
+                del self.client_info[ws_id]
+            
+            print(f"❌ WebSocket disconnected. Total connections: {len(self.active_connections)}")
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        """Send message to specific WebSocket connection"""
+        try:
+            await websocket.send_text(message)
+        except Exception as e:
+            print(f"Error sending personal message: {e}")
+
+    async def send_personal_json(self, data: dict, websocket: WebSocket):
+        """Send JSON message to specific WebSocket connection"""
+        try:
+            await websocket.send_json(data)
+        except Exception as e:
+            print(f"Error sending personal JSON: {e}")
+
+    async def broadcast(self, message: str, exclude: WebSocket = None):
+        """Broadcast text message to all connected clients"""
+        disconnected = []
+        
+        for connection in self.active_connections:
+            if connection == exclude:
+                continue
+                
+            try:
+                await connection.send_text(message)
+            except Exception as e:
+                print(f"Error broadcasting to client: {e}")
+                disconnected.append(connection)
+        
+        # Clean up disconnected clients
+        for conn in disconnected:
+            self.disconnect(conn)
+
+    async def broadcast_json(self, data: dict, exclude: WebSocket = None):
+        """Broadcast JSON message to all connected clients"""
+        disconnected = []
+        
+        for connection in self.active_connections:
+            if connection == exclude:
+                continue
+                
+            try:
+                await connection.send_json(data)
+            except Exception as e:
+                print(f"Error broadcasting JSON to client: {e}")
+                disconnected.append(connection)
+        
+        # Clean up disconnected clients
+        for conn in disconnected:
+            self.disconnect(conn)
+
+    def get_connection_count(self) -> int:
+        """Get the number of active connections"""
+        return len(self.active_connections)
+
+# Global connection manager instance
+ws_manager = ConnectionManager()
+
+
+@app.get("/websocket-test", response_class=HTMLResponse, tags=["WebSocket"])
+async def websocket_test_page():
+    """
+    Serves an HTML page for testing WebSocket functionality
+    Access at: http://localhost:8000/websocket-test
+    """
+    html_content = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FastAPI WebSocket Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"], input[type="number"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background-color: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #5568d3;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            margin-top: 20px;
+        }
+        .message {
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #17a2b8;
+        }
+        .message.sent {
+            background-color: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+        .message.received {
+            background-color: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+        .message.broadcast {
+            background-color: #e7e7ff;
+            color: #383874;
+            border-left: 4px solid #667eea;
+        }
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+        .timestamp {
+            font-size: 11px;
+            color: #999;
+            margin-left: 10px;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 FastAPI WebSocket Demo</h1>
+        <p class="subtitle">Real-time bidirectional communication</p>
+        
+        <div id="status" class="status disconnected">⭕ Disconnected</div>
+        
+        <div class="controls">
+            <input type="number" id="clientId" placeholder="Enter Client ID" value="1" min="1">
+            <button class="btn-success" onclick="connect()">Connect</button>
+            <button class="btn-danger" onclick="disconnect()">Disconnect</button>
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+            <button class="btn-primary" onclick="sendMessage()">Send Message</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="sentCount">0</div>
+                <div class="stat-label">Messages Sent</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="receivedCount">0</div>
+                <div class="stat-label">Messages Received</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="connectionTime">0:00</div>
+                <div class="stat-label">Connected Time</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let sentCount = 0;
+        let receivedCount = 0;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('Already connected!', 'error');
+                return;
+            }
+            
+            const clientId = document.getElementById('clientId').value;
+            if (!clientId) {
+                addMessage('Please enter a client ID', 'error');
+                return;
+            }
+            
+            ws = new WebSocket(`ws://localhost:8000/ws/echo/${clientId}`);
+            
+            ws.onopen = function() {
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('status').textContent = '✅ Connected';
+                addMessage(`Connected as Client #${clientId}`, 'info');
+                
+                connectionStartTime = Date.now();
+                startConnectionTimer();
+            };
+            
+            ws.onmessage = function(event) {
+                receivedCount++;
+                document.getElementById('receivedCount').textContent = receivedCount;
+                
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'broadcast') {
+                        addMessage(`📢 ${data.message}`, 'broadcast');
+                    } else if (data.type === 'echo') {
+                        addMessage(`🔄 ${data.message}`, 'received');
+                    } else {
+                        addMessage(event.data, 'received');
+                    }
+                } catch {
+                    addMessage(`📩 ${event.data}`, 'received');
+                }
+            };
+            
+            ws.onclose = function() {
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').textContent = '⭕ Disconnected';
+                addMessage('Disconnected from server', 'info');
+                
+                stopConnectionTimer();
+                ws = null;
+            };
+            
+            ws.onerror = function(error) {
+                addMessage('WebSocket error occurred', 'error');
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        function disconnect() {
+            if (!ws) {
+                addMessage('Not connected', 'error');
+                return;
+            }
+            
+            ws.close();
+            ws = null;
+        }
+        
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('Not connected! Click Connect first.', 'error');
+                return;
+            }
+            
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) {
+                addMessage('Please enter a message', 'error');
+                return;
+            }
+            
+            ws.send(message);
+            addMessage(`📤 You: ${message}`, 'sent');
+            
+            sentCount++;
+            document.getElementById('sentCount').textContent = sentCount;
+            
+            input.value = '';
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function addMessage(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            messageDiv.innerHTML = `${message}<span class="timestamp">${timestamp}</span>`;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function startConnectionTimer() {
+            connectionTimer = setInterval(() => {
+                if (connectionStartTime) {
+                    const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = elapsed % 60;
+                    document.getElementById('connectionTime').textContent = 
+                        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }, 1000);
+        }
+        
+        function stopConnectionTimer() {
+            if (connectionTimer) {
+                clearInterval(connectionTimer);
+                connectionTimer = null;
+            }
+            document.getElementById('connectionTime').textContent = '0:00';
+        }
+    </script>
+</body>
+</html>
+    """
+    return HTMLResponse(content=html_content, status_code=200)
+
+
+@app.websocket("/ws/echo/{client_id}")
+async def websocket_echo_endpoint(websocket: WebSocket, client_id: int):
+    """
+    WebSocket echo endpoint with broadcasting support.
+    Echoes back received messages and broadcasts to all clients.
+    """
+    await ws_manager.connect(websocket, str(client_id))
+    
+    # Notify all clients about new connection
+    await ws_manager.broadcast_json(
+        {
+            "type": "broadcast",
+            "message": f"Client #{client_id} joined the chat"
+        },
+        exclude=websocket
+    )
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_text()
+            
+            print(f"📨 Received from Client #{client_id}: {data}")
+            
+            # Send echo response back to sender
+            await ws_manager.send_personal_json(
+                {
+                    "type": "echo",
+                    "message": f"Echo: {data}",
+                    "client_id": client_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                websocket
+            )
+            
+            # Broadcast to all other clients
+            await ws_manager.broadcast_json(
+                {
+                    "type": "broadcast",
+                    "message": f"Client #{client_id}: {data}",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                exclude=websocket
+            )
+    
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+        
+        # Notify all clients about disconnection
+        await ws_manager.broadcast_json(
+            {
+                "type": "broadcast",
+                "message": f"Client #{client_id} left the chat"
+            }
+        )
+        
+        print(f"👋 Client #{client_id} disconnected")
+
+
+@app.websocket("/ws/chat/{room_id}/{username}")
+async def websocket_chat_room(websocket: WebSocket, room_id: str, username: str):
+    """
+    WebSocket chat room endpoint with room-based messaging.
+    """
+    await ws_manager.connect(websocket, f"{room_id}:{username}")
+    
+    # Send welcome message to user
+    await ws_manager.send_personal_json(
+        {
+            "type": "system",
+            "message": f"Welcome to room '{room_id}', {username}!",
+            "room": room_id,
+            "connected_users": ws_manager.get_connection_count()
+        },
+        websocket
+    )
+    
+    # Notify room about new user
+    await ws_manager.broadcast_json(
+        {
+            "type": "join",
+            "username": username,
+            "room": room_id,
+            "message": f"{username} joined the room",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        exclude=websocket
+    )
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            
+            try:
+                message_data = json.loads(data)
+                msg_type = message_data.get("type", "chat")
+                content = message_data.get("content", data)
+            except json.JSONDecodeError:
+                msg_type = "chat"
+                content = data
+            
+            await ws_manager.broadcast_json(
+                {
+                    "type": msg_type,
+                    "username": username,
+                    "room": room_id,
+                    "content": content,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            )
+    
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+        await ws_manager.broadcast_json(
+            {
+                "type": "leave",
+                "username": username,
+                "room": room_id,
+                "message": f"{username} left the room",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+        print(f"👋 {username} left room {room_id}")
+
+
+@app.get("/ws/stats", tags=["WebSocket"])
+async def get_websocket_stats():
+    """
+    Get current WebSocket connection statistics.
+    """
+    return {
+        "active_connections": ws_manager.get_connection_count(),
+        "clients": list(ws_manager.client_info.values()),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+
+# ============================================================================
+# AUTHENTICATED WEBSOCKET ENDPOINTS
+# ============================================================================
+
+class AuthenticatedConnectionManager:
+    """
+    Enhanced Connection Manager with authentication support.
+    Tracks authenticated users and their associated connections.
+    """
+    def __init__(self):
+        self.active_connections: dict = {}  # {websocket: user_info}
+        self.user_connections: dict = {}     # {user_id: [websockets]}
+        
+    async def connect(self, websocket: WebSocket, user: User):
+        """Accept authenticated WebSocket connection"""
+        await websocket.accept()
+        
+        user_info = {
+            "user_id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role.value,
+            "connected_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        self.active_connections[websocket] = user_info
+        
+        # Track user's multiple connections
+        if user.id not in self.user_connections:
+            self.user_connections[user.id] = []
+        self.user_connections[user.id].append(websocket)
+        
+        print(f"✅ Authenticated WebSocket: {user.email} (ID: {user.id})")
+    
+    def disconnect(self, websocket: WebSocket):
+        """Remove WebSocket from active connections"""
+        if websocket in self.active_connections:
+            user_info = self.active_connections[websocket]
+            user_id = user_info["user_id"]
+            
+            # Remove from active connections
+            del self.active_connections[websocket]
+            
+            # Remove from user's connections
+            if user_id in self.user_connections:
+                if websocket in self.user_connections[user_id]:
+                    self.user_connections[user_id].remove(websocket)
+                
+                # Clean up if no more connections for this user
+                if not self.user_connections[user_id]:
+                    del self.user_connections[user_id]
+            
+            print(f"❌ Authenticated WebSocket disconnected: {user_info['email']}")
+    
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        """Send text message to specific WebSocket"""
+        try:
+            await websocket.send_text(message)
+        except Exception as e:
+            print(f"Error sending message: {e}")
+    
+    async def send_personal_json(self, data: dict, websocket: WebSocket):
+        """Send JSON message to specific WebSocket"""
+        try:
+            await websocket.send_json(data)
+        except Exception as e:
+            print(f"Error sending JSON: {e}")
+    
+    async def send_to_user(self, user_id: int, data: dict):
+        """Send message to all connections of a specific user"""
+        if user_id in self.user_connections:
+            disconnected = []
+            for websocket in self.user_connections[user_id]:
+                try:
+                    await websocket.send_json(data)
+                except Exception as e:
+                    print(f"Error sending to user {user_id}: {e}")
+                    disconnected.append(websocket)
+            
+            # Clean up disconnected
+            for ws in disconnected:
+                self.disconnect(ws)
+    
+    async def broadcast(self, message: str, exclude: WebSocket = None):
+        """Broadcast text message to all authenticated connections"""
+        disconnected = []
+        for websocket in self.active_connections:
+            if websocket == exclude:
+                continue
+            try:
+                await websocket.send_text(message)
+            except Exception as e:
+                print(f"Broadcast error: {e}")
+                disconnected.append(websocket)
+        
+        for ws in disconnected:
+            self.disconnect(ws)
+    
+    async def broadcast_json(self, data: dict, exclude: WebSocket = None):
+        """Broadcast JSON message to all authenticated connections"""
+        disconnected = []
+        for websocket in self.active_connections:
+            if websocket == exclude:
+                continue
+            try:
+                await websocket.send_json(data)
+            except Exception as e:
+                print(f"Broadcast JSON error: {e}")
+                disconnected.append(websocket)
+        
+        for ws in disconnected:
+            self.disconnect(ws)
+    
+    async def broadcast_to_role(self, role: UserRole, data: dict):
+        """Broadcast message to all users with specific role"""
+        disconnected = []
+        for websocket, user_info in self.active_connections.items():
+            if user_info["role"] == role.value:
+                try:
+                    await websocket.send_json(data)
+                except Exception as e:
+                    print(f"Error broadcasting to role {role.value}: {e}")
+                    disconnected.append(websocket)
+        
+        for ws in disconnected:
+            self.disconnect(ws)
+    
+    def get_user_info(self, websocket: WebSocket) -> dict:
+        """Get user info for a specific WebSocket"""
+        return self.active_connections.get(websocket)
+    
+    def get_connection_count(self) -> int:
+        """Get total number of authenticated connections"""
+        return len(self.active_connections)
+    
+    def get_online_users(self) -> List[dict]:
+        """Get list of all online users"""
+        online_users = {}
+        for user_info in self.active_connections.values():
+            user_id = user_info["user_id"]
+            if user_id not in online_users:
+                online_users[user_id] = {
+                    "user_id": user_id,
+                    "email": user_info["email"],
+                    "full_name": user_info["full_name"],
+                    "role": user_info["role"],
+                    "connection_count": 0
+                }
+            online_users[user_id]["connection_count"] += 1
+        
+        return list(online_users.values())
+
+# Global authenticated connection manager
+auth_ws_manager = AuthenticatedConnectionManager()
+
+
+async def verify_websocket_token(token: str, db: Session) -> User:
+    """
+    Verify JWT token and return authenticated user.
+    
+    Args:
+        token: JWT access token
+        db: Database session
+        
+    Returns:
+        User object if valid
+        
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
+    try:
+        from auth import SECRET_KEY, ALGORITHM
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+
+        print("user_id from token:", user_id)
+        
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+        
+        user = db.query(User).filter(User.id == user_id).first()        
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Inactive user"
+            )
+        
+        return user
+        
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+
+@app.websocket("/ws/secure/echo/{client_id}")
+async def authenticated_echo_endpoint(websocket: WebSocket, client_id: str, db: Session = Depends(get_db)):
+    """
+    Authenticated WebSocket echo endpoint.
+    
+    **Authentication:**
+    - Requires valid JWT token in query parameter 'token'
+    - Example: ws://localhost:8000/ws/secure/echo/1?token=YOUR_JWT_TOKEN
+    
+    **Features:**
+    - Token validation before connection
+    - User identification
+    - Personalized echo responses
+    - Broadcast user activity to other authenticated users
+    
+    **Usage:**
+    1. Get access token from /token endpoint
+    2. Connect: ws://localhost:8000/ws/secure/echo/{id}?token={your_token}
+    3. Send messages
+    4. Receive echoes with user context
+    """
+    # Extract and verify token
+    token = websocket.query_params.get("token")
+    
+    if not token:
+        await websocket.close(code=1008, reason="Missing authentication token")
+        return
+    
+    try:
+        user = await verify_websocket_token(token, db)
+    except HTTPException as e:
+        await websocket.close(code=1008, reason=e.detail)
+        return
+    
+    # Connect authenticated user
+    await auth_ws_manager.connect(websocket, user)
+    
+    # Send welcome message
+    await auth_ws_manager.send_personal_json(
+        {
+            "type": "welcome",
+            "message": f"Welcome {user.full_name}!",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role.value
+            },
+            "client_id": client_id,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        websocket
+    )
+    
+    # Broadcast user joined
+    await auth_ws_manager.broadcast_json(
+        {
+            "type": "user_joined",
+            "message": f"{user.full_name} joined the chat",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role.value
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        exclude=websocket
+    )
+    
+    try:
+        while True:
+            # Receive message
+            data = await websocket.receive_text()
+            
+            print(f"📨 {user.full_name} ({user.email}): {data}")
+            
+            # Send personal echo
+            await auth_ws_manager.send_personal_json(
+                {
+                    "type": "echo",
+                    "message": f"Echo: {data}",
+                    "original": data,
+                    "from": {
+                        "id": user.id,
+                        "email": user.email,
+                        "full_name": user.full_name
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                websocket
+            )
+            
+            # Broadcast to others
+            await auth_ws_manager.broadcast_json(
+                {
+                    "type": "message",
+                    "content": data,
+                    "from": {
+                        "id": user.id,
+                        "email": user.email,
+                        "full_name": user.full_name,
+                        "role": user.role.value
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                exclude=websocket
+            )
+    
+    except WebSocketDisconnect:
+        auth_ws_manager.disconnect(websocket)
+        
+        # Broadcast user left
+        await auth_ws_manager.broadcast_json(
+            {
+                "type": "user_left",
+                "message": f"{user.full_name} left the chat",
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "full_name": user.full_name
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+
+
+@app.websocket("/ws/secure/chat/{room_id}")
+async def authenticated_chat_room(
+    websocket: WebSocket,
+    room_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Authenticated chat room endpoint.
+    
+    **Authentication:**
+    - Requires valid JWT token in query parameter
+    - Example: ws://localhost:8000/ws/secure/chat/general?token=YOUR_JWT_TOKEN
+    
+    **Features:**
+    - Secure room-based messaging
+    - User identification and verification
+    - Role-based features (admin announcements)
+    - Private messaging support
+    - Online user list
+    
+    **Message Types:**
+    - chat: Regular chat message
+    - private: Private message to specific user
+    - announcement: Admin-only broadcast (requires admin role)
+    - typing: Typing indicator
+    """
+    # Extract and verify token
+    token = websocket.query_params.get("token")
+    
+    if not token:
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+    
+    try:
+        user = await verify_websocket_token(token, db)
+    except HTTPException as e:
+        await websocket.close(code=1008, reason=e.detail)
+        return
+    
+    # Connect user
+    await auth_ws_manager.connect(websocket, user)
+    
+    # Send welcome with room info
+    await auth_ws_manager.send_personal_json(
+        {
+            "type": "room_joined",
+            "message": f"Welcome to {room_id}",
+            "room": room_id,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role.value
+            },
+            "online_users": auth_ws_manager.get_online_users(),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        websocket
+    )
+    
+    # Notify others
+    await auth_ws_manager.broadcast_json(
+        {
+            "type": "user_joined_room",
+            "room": room_id,
+            "user": {
+                "id": user.id,
+                "full_name": user.full_name,
+                "role": user.role.value
+            },
+            "message": f"{user.full_name} joined {room_id}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        exclude=websocket
+    )
+    
+    # rooms = {
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            
+            try:
+                message_data = json.loads(data)
+                msg_type = message_data.get("type", "chat")
+                content = message_data.get("content", data)
+                target_user_id = message_data.get("target_user_id")
+            except json.JSONDecodeError:
+                msg_type = "chat"
+                content = data
+                target_user_id = None
+            
+            # Handle different message types
+            if msg_type == "private" and target_user_id:
+                # Private message to specific user
+                await auth_ws_manager.send_to_user(
+                    target_user_id,
+                    {
+                        "type": "private_message",
+                        "content": content,
+                        "from": {
+                            "id": user.id,
+                            "full_name": user.full_name
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                )
+                
+                # Confirm to sender
+                await auth_ws_manager.send_personal_json(
+                    {
+                        "type": "private_sent",
+                        "content": content,
+                        "to_user_id": target_user_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    },
+                    websocket
+                )
+            
+            elif msg_type == "announcement":
+                # Admin-only announcements
+                if user.role == UserRole.ADMIN:
+                    await auth_ws_manager.broadcast_json(
+                        {
+                            "type": "announcement",
+                            "content": content,
+                            "from": {
+                                "id": user.id,
+                                "full_name": user.full_name,
+                                "role": user.role.value
+                            },
+                            "room": room_id,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                    )
+                else:
+                    await auth_ws_manager.send_personal_json(
+                        {
+                            "type": "error",
+                            "message": "Only admins can send announcements",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        },
+                        websocket
+                    )
+            
+            elif msg_type == "typing":
+                # Typing indicator
+                await auth_ws_manager.broadcast_json(
+                    {
+                        "type": "user_typing",
+                        "room": room_id,
+                        "user": {
+                            "id": user.id,
+                            "full_name": user.full_name
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    },
+                    exclude=websocket
+                )
+            
+            else:
+                # Regular chat message
+                await auth_ws_manager.broadcast_json(
+                    {
+                        "type": "chat",
+                        "content": content,
+                        "room": room_id,
+                        "from": {
+                            "id": user.id,
+                            "email": user.email,
+                            "full_name": user.full_name,
+                            "role": user.role.value
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                )
+    
+    except WebSocketDisconnect:
+        auth_ws_manager.disconnect(websocket)
+        
+        # Notify others
+        await auth_ws_manager.broadcast_json(
+            {
+                "type": "user_left_room",
+                "room": room_id,
+                "user": {
+                    "id": user.id,
+                    "full_name": user.full_name
+                },
+                "message": f"{user.full_name} left {room_id}",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+
+
+@app.websocket("/ws/secure/notifications")
+async def authenticated_notifications(
+    websocket: WebSocket,
+    db: Session = Depends(get_db)
+):
+    """
+    Personal notification stream for authenticated users.
+    
+    **Authentication:**
+    - Requires valid JWT token
+    - Example: ws://localhost:8000/ws/secure/notifications?token=YOUR_JWT_TOKEN
+    
+    **Features:**
+    - Real-time personal notifications
+    - System messages
+    - User-specific updates
+    - Role-based notifications
+    
+    **Use Cases:**
+    - New message alerts
+    - Task assignments
+    - System announcements
+    - Status updates
+    """
+    token = websocket.query_params.get("token")
+    
+    if not token:
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+    
+    try:
+        user = await verify_websocket_token(token, db)
+    except HTTPException as e:
+        await websocket.close(code=1008, reason=e.detail)
+        return
+    
+    await auth_ws_manager.connect(websocket, user)
+    
+    # Send connection confirmation
+    await auth_ws_manager.send_personal_json(
+        {
+            "type": "notification_stream_connected",
+            "message": "Connected to notification stream",
+            "user_id": user.id,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        websocket
+    )
+    
+    try:
+        while True:
+            # Keep connection alive and listen for client messages
+            data = await websocket.receive_text()
+            
+            # Echo acknowledgment
+            await auth_ws_manager.send_personal_json(
+                {
+                    "type": "ack",
+                    "message": "Notification stream active",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                websocket
+            )
+    
+    except WebSocketDisconnect:
+        auth_ws_manager.disconnect(websocket)
+        print(f"Notification stream disconnected: {user.email}")
+
+
+@app.get("/ws/secure/stats", tags=["Authenticated WebSocket"])
+async def get_authenticated_stats(current_user: User = Depends(get_current_active_user)):
+    """
+    Get authenticated WebSocket connection statistics.
+    
+    **Authentication Required:** Yes (Bearer token)
+    
+    **Returns:**
+    - Total authenticated connections
+    - Online users list
+    - User's own connections
+    - Connection details
+    """
+    user_info = auth_ws_manager.get_online_users()
+    
+    # Find current user's connections
+    user_connections = 0
+    if current_user.id in auth_ws_manager.user_connections:
+        user_connections = len(auth_ws_manager.user_connections[current_user.id])
+    
+    return {
+        "total_connections": auth_ws_manager.get_connection_count(),
+        "unique_users": len(auth_ws_manager.user_connections),
+        "online_users": user_info,
+        "your_connections": user_connections,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.post("/ws/secure/send-notification/{user_id}", tags=["Authenticated WebSocket"])
+async def send_notification_to_user(
+    user_id: int,
+    notification: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Send notification to specific user (Admin only).
+    
+    **Authentication Required:** Yes (Admin role)
+    
+    **Parameters:**
+    - user_id: Target user ID
+    - notification: Notification data (type, message, etc.)
+    
+    **Example Request:**
+    ```json
+    {
+        "type": "alert",
+        "message": "Your task has been updated",
+        "priority": "high"
+    }
+    ```
+    """
+    # Verify target user exists
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Add metadata
+    notification_data = {
+        **notification,
+        "from_admin": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "full_name": current_user.full_name
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Send to user
+    await auth_ws_manager.send_to_user(user_id, notification_data)
+    
+    return {
+        "status": "sent",
+        "target_user_id": user_id,
+        "notification": notification_data
+    }
+
+
+@app.post("/ws/secure/broadcast", tags=["Authenticated WebSocket"])
+async def broadcast_message(
+    message: dict,
+    current_user: User = Depends(require_admin)
+):
+    """
+    Broadcast message to all authenticated WebSocket connections (Admin only).
+    
+    **Authentication Required:** Yes (Admin role)
+    
+    **Example Request:**
+    ```json
+    {
+        "type": "system_announcement",
+        "message": "Server maintenance in 10 minutes",
+        "priority": "high"
+    }
+    ```
+    """
+    broadcast_data = {
+        **message,
+        "from_admin": {
+            "id": current_user.id,
+            "full_name": current_user.full_name
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await auth_ws_manager.broadcast_json(broadcast_data)
+    
+    return {
+        "status": "broadcast_sent",
+        "recipients": auth_ws_manager.get_connection_count(),
+        "message": broadcast_data
+    }
+
+
+# HTML test page for authenticated WebSockets
+authenticated_websocket_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authenticated WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #1e3c72;
+            margin-bottom: 10px;
+        }
+        .auth-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.authenticated { background: #d1ecf1; color: #0c5460; }
+        input, button, select {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background: #1e3c72;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #2a5298; }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: #f8f9fa;
+            margin: 20px 0;
+        }
+        .message {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .message.welcome { background: #d1ecf1; border-color: #17a2b8; }
+        .message.echo { background: #d4edda; border-color: #28a745; }
+        .message.user_joined { background: #fff3cd; border-color: #ffc107; }
+        .message.user_left { background: #f8d7da; border-color: #dc3545; }
+        .message.chat { background: #e7e7ff; border-color: #6c757d; }
+        .message.announcement { background: #ffe5e5; border-color: #ff0000; font-weight: bold; }
+        .user-info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Authenticated WebSocket Test</h1>
+        <p>Test secure WebSocket connections with JWT authentication</p>
+        
+        <!-- Authentication Section -->
+        <div class="auth-section">
+            <h3>Step 1: Authenticate</h3>
+            <input type="email" id="email" placeholder="Email" value="admin@example.com">
+            <input type="password" id="password" placeholder="Password" value="admin123">
+            <button onclick="login()">Login & Get Token</button>
+            <div id="authStatus" class="status disconnected">Not authenticated</div>
+            <div id="userInfo" class="user-info" style="display:none;"></div>
+        </div>
+        
+        <!-- Connection Section -->
+        <div class="auth-section">
+            <h3>Step 2: Connect to WebSocket</h3>
+            <select id="endpoint">
+                <option value="echo">Secure Echo</option>
+                <option value="chat">Secure Chat Room</option>
+                <option value="notifications">Notification Stream</option>
+            </select>
+            <input type="text" id="clientId" placeholder="Client ID / Room" value="general">
+            <button onclick="connect()" id="connectBtn" disabled>Connect</button>
+            <button onclick="disconnect()" id="disconnectBtn" disabled>Disconnect</button>
+            <div id="wsStatus" class="status disconnected">Not connected</div>
+        </div>
+        
+        <!-- Messaging Section -->
+        <div class="grid">
+            <div>
+                <h3>Send Message</h3>
+                <select id="messageType">
+                    <option value="chat">Chat</option>
+                    <option value="announcement">Announcement (Admin)</option>
+                    <option value="typing">Typing Indicator</option>
+                </select>
+                <input type="text" id="messageInput" placeholder="Type message..." style="width:80%">
+                <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+            </div>
+            <div>
+                <h3>Online Users</h3>
+                <div id="onlineUsers" style="background:#f8f9fa; padding:10px; border-radius:5px; min-height:50px;">
+                    No users online
+                </div>
+            </div>
+        </div>
+        
+        <!-- Messages Display -->
+        <div id="messages"></div>
+        
+        <!-- Stats -->
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-top:20px;">
+            <div style="background:#f8f9fa; padding:15px; border-radius:8px; text-align:center;">
+                <div style="font-size:24px; font-weight:bold; color:#1e3c72;" id="sentCount">0</div>
+                <div style="font-size:12px; color:#666;">Sent</div>
+            </div>
+            <div style="background:#f8f9fa; padding:15px; border-radius:8px; text-align:center;">
+                <div style="font-size:24px; font-weight:bold; color:#1e3c72;" id="receivedCount">0</div>
+                <div style="font-size:12px; color:#666;">Received</div>
+            </div>
+            <div style="background:#f8f9fa; padding:15px; border-radius:8px; text-align:center;">
+                <div style="font-size:24px; font-weight:bold; color:#1e3c72;" id="connectionTime">0:00</div>
+                <div style="font-size:12px; color:#666;">Connected</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let accessToken = null;
+        let currentUser = null;
+        let sentCount = 0;
+        let receivedCount = 0;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+        
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const formData = new URLSearchParams();
+                formData.append('username', email);
+                formData.append('password', password);
+                
+                const response = await fetch('/token', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    accessToken = data.access_token;
+                    
+                    // Get user info
+                    const userResponse = await fetch('/users/me', {
+                        headers: {'Authorization': `Bearer ${accessToken}`}
+                    });
+                    currentUser = await userResponse.json();
+                    
+                    document.getElementById('authStatus').className = 'status authenticated';
+                    document.getElementById('authStatus').textContent = '✅ Authenticated';
+                    
+                    document.getElementById('userInfo').style.display = 'block';
+                    document.getElementById('userInfo').innerHTML = `
+                        <strong>Logged in as:</strong> ${currentUser.full_name}<br>
+                        <strong>Email:</strong> ${currentUser.email}<br>
+                        <strong>Role:</strong> ${currentUser.role}
+                    `;
+                    
+                    document.getElementById('connectBtn').disabled = false;
+                    addMessage('✅ Authentication successful!', 'welcome');
+                } else {
+                    addMessage('❌ Login failed. Check credentials.', 'user_left');
+                }
+            } catch (error) {
+                addMessage('❌ Error: ' + error.message, 'user_left');
+            }
+        }
+        
+        function connect() {
+            if (!accessToken) {
+                addMessage('Please login first!', 'user_left');
+                return;
+            }
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('Already connected!', 'user_left');
+                return;
+            }
+            
+            const endpoint = document.getElementById('endpoint').value;
+            const clientId = document.getElementById('clientId').value;
+            
+            let wsUrl;
+            if (endpoint === 'echo') {
+                wsUrl = `ws://localhost:8000/ws/secure/echo/${clientId}?token=${accessToken}`;
+            } else if (endpoint === 'chat') {
+                wsUrl = `ws://localhost:8000/ws/secure/chat/${clientId}?token=${accessToken}`;
+            } else {
+                wsUrl = `ws://localhost:8000/ws/secure/notifications?token=${accessToken}`;
+            }
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                document.getElementById('wsStatus').className = 'status connected';
+                document.getElementById('wsStatus').textContent = '✅ WebSocket Connected';
+                document.getElementById('sendBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('connectBtn').disabled = true;
+                connectionStartTime = Date.now();
+                startConnectionTimer();
+            };
+            
+            ws.onmessage = (event) => {
+                receivedCount++;
+                document.getElementById('receivedCount').textContent = receivedCount;
+                
+                const data = JSON.parse(event.data);
+                
+                let messageClass = data.type || 'chat';
+                let messageText = '';
+                
+                if (data.type === 'welcome' || data.type === 'room_joined') {
+                    messageText = `🎉 ${data.message}`;
+                    if (data.online_users) {
+                        updateOnlineUsers(data.online_users);
+                    }
+                } else if (data.type === 'echo') {
+                    messageText = `🔄 ${data.message}`;
+                } else if (data.type === 'user_joined' || data.type === 'user_joined_room') {
+                    messageText = `👋 ${data.message}`;
+                } else if (data.type === 'user_left' || data.type === 'user_left_room') {
+                    messageText = `👋 ${data.message}`;
+                } else if (data.type === 'chat' || data.type === 'message') {
+                    messageText = `💬 ${data.from?.full_name}: ${data.content}`;
+                } else if (data.type === 'announcement') {
+                    messageText = `📢 ANNOUNCEMENT: ${data.content}`;
+                } else if (data.type === 'user_typing') {
+                    messageText = `⌨️  ${data.user.full_name} is typing...`;
+                } else {
+                    messageText = JSON.stringify(data, null, 2);
+                }
+                
+                addMessage(messageText, messageClass);
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('wsStatus').className = 'status disconnected';
+                document.getElementById('wsStatus').textContent = '⭕ Disconnected';
+                document.getElementById('sendBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('connectBtn').disabled = false;
+                stopConnectionTimer();
+                ws = null;
+            };
+            
+            ws.onerror = (error) => {
+                addMessage('❌ WebSocket error', 'user_left');
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+        
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('Not connected!', 'user_left');
+                return;
+            }
+            
+            const messageInput = document.getElementById('messageInput');
+            const messageType = document.getElementById('messageType').value;
+            const message = messageInput.value.trim();
+            
+            if (!message && messageType !== 'typing') {
+                return;
+            }
+            
+            const data = {
+                type: messageType,
+                content: message
+            };
+            
+            ws.send(JSON.stringify(data));
+            
+            if (messageType !== 'typing') {
+                addMessage(`📤 You: ${message}`, 'echo');
+                sentCount++;
+                document.getElementById('sentCount').textContent = sentCount;
+                messageInput.value = '';
+            }
+        }
+        
+        function addMessage(text, className) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${className}`;
+            messageDiv.innerHTML = `${text} <small style="color:#999;">${new Date().toLocaleTimeString()}</small>`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function updateOnlineUsers(users) {
+            const onlineDiv = document.getElementById('onlineUsers');
+            if (users && users.length > 0) {
+                onlineDiv.innerHTML = users.map(u => 
+                    `<div style="padding:5px; border-bottom:1px solid #ddd;">
+                        👤 ${u.full_name} (${u.role})
+                    </div>`
+                ).join('');
+            } else {
+                onlineDiv.innerHTML = 'No users online';
+            }
+        }
+        
+        function startConnectionTimer() {
+            connectionTimer = setInterval(() => {
+                if (connectionStartTime) {
+                    const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = elapsed % 60;
+                    document.getElementById('connectionTime').textContent = 
+                        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }, 1000);
+        }
+        
+        function stopConnectionTimer() {
+            if (connectionTimer) {
+                clearInterval(connectionTimer);
+                connectionTimer = null;
+            }
+            document.getElementById('connectionTime').textContent = '0:00';
+        }
+        
+        // Allow Enter key to send
+        document.getElementById('messageInput')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
+"""
+
+
+@app.get("/authenticated-websocket-test", response_class=HTMLResponse, tags=["Authenticated WebSocket"])
+async def authenticated_websocket_test_page():
+    """
+    HTML test page for authenticated WebSocket functionality.
+    
+    **Features:**
+    - Login with credentials
+    - Get JWT token automatically
+    - Connect to authenticated WebSocket endpoints
+    - Test echo, chat, and notification streams
+    - See online users
+    - Send different message types
+    
+    **Access:** http://localhost:8000/authenticated-websocket-test
+    
+    **Default credentials:**
+    - Email: admin@example.com
+    - Password: admin123
+    """
+    return HTMLResponse(content=authenticated_websocket_html, status_code=200)
+
+
+# ============================================================================
+# END AUTHENTICATED WEBSOCKET IMPLEMENTATION
+# ============================================================================

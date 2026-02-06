@@ -30,6 +30,7 @@
 ### What Problem Does JWT Solve?
 
 Before JWT, traditional session-based authentication worked like this:
+
 - User logs in
 - Server creates a session and stores it in memory/database
 - Server sends session ID to client (usually in a cookie)
@@ -37,12 +38,14 @@ Before JWT, traditional session-based authentication worked like this:
 - Server looks up session in storage to verify user
 
 **Problems with Session-Based Auth:**
+
 - ❌ Server must store all sessions (memory/database overhead)
 - ❌ Difficult to scale horizontally (session sharing between servers)
 - ❌ Not ideal for microservices architecture
 - ❌ CORS complications with cookies
 
 **How JWT Solves These Issues:**
+
 - ✅ Stateless - no server-side storage needed
 - ✅ Self-contained - all user info in the token
 - ✅ Easy to scale - any server can verify the token
@@ -54,7 +57,9 @@ Before JWT, traditional session-based authentication worked like this:
 ## 2. Understanding Authentication vs Authorization
 
 ### Authentication
+
 **"Who are you?"** - Verifying the identity of a user.
+
 ```
 User: "I'm John Doe"
 System: "Prove it" (login with password)
@@ -63,7 +68,9 @@ System: "OK, you are John Doe" (issues JWT)
 ```
 
 ### Authorization
+
 **"What can you do?"** - Verifying what a user is allowed to access.
+
 ```
 User: "I want to delete this post"
 System: Checks JWT → "You are John Doe"
@@ -78,6 +85,7 @@ System: "Access granted" or "Access denied"
 ## 3. What is JWT?
 
 ### Definition
+
 **JWT (JSON Web Token)** is an open standard (RFC 7519) that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.
 
 ### Key Characteristics
@@ -89,6 +97,7 @@ System: "Access granted" or "Access denied"
 ### When to Use JWT
 
 ✅ **Good Use Cases:**
+
 - API authentication
 - Single Sign-On (SSO)
 - Mobile applications
@@ -96,6 +105,7 @@ System: "Access granted" or "Access denied"
 - Short-lived access tokens
 
 ❌ **Not Ideal For:**
+
 - Long-term storage of sensitive data
 - Storing large amounts of data (tokens get big)
 - Scenarios requiring immediate token revocation
@@ -129,15 +139,18 @@ Let's decode each part:
 ### 4.1 Header (Red Part)
 
 The header typically consists of two parts:
+
 - `typ`: Token type (JWT)
 - `alg`: Hashing algorithm (e.g., HS256, RS256)
 
 **Encoded:**
+
 ```
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
 ```
 
 **Decoded (Base64):**
+
 ```json
 {
   "alg": "HS256",
@@ -146,6 +159,7 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
 ```
 
 **Common Algorithms:**
+
 - **HS256** (HMAC + SHA256): Symmetric, uses secret key
 - **RS256** (RSA + SHA256): Asymmetric, uses private/public key pair
 - **ES256** (ECDSA + SHA256): Asymmetric, elliptic curve
@@ -157,11 +171,13 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
 The payload contains the **claims** - statements about an entity (usually the user) and additional data.
 
 **Encoded:**
+
 ```
 eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ
 ```
 
 **Decoded (Base64):**
+
 ```json
 {
   "sub": "1234567890",
@@ -198,14 +214,13 @@ eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ
 The signature ensures the token hasn't been tampered with.
 
 **How it's created:**
+
 ```javascript
-HMACSHA256(
-  base64UrlEncode(header) + "." + base64UrlEncode(payload),
-  secret
-)
+HMACSHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), secret);
 ```
 
 **Example with HS256:**
+
 ```python
 import hmac
 import hashlib
@@ -225,11 +240,13 @@ signature_encoded = base64.urlsafe_b64encode(signature)
 ```
 
 **Result:**
+
 ```
 SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
 ```
 
 **Key Point:** To verify the signature, you need the secret key. This proves:
+
 1. The token was created by someone with the secret
 2. The token hasn't been modified
 
@@ -267,6 +284,7 @@ SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
 ### Step-by-Step Explanation
 
 **Step 1-3: Login & Token Generation**
+
 1. User submits credentials (username/password)
 2. Server verifies credentials against database
 3. If valid, server creates JWT with user info
@@ -274,6 +292,7 @@ SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
 5. Server sends JWT back to client
 
 **Step 4-6: Accessing Protected Resources**
+
 1. Client stores JWT (localStorage, memory, etc.)
 2. Client includes JWT in Authorization header for subsequent requests
 3. Server verifies JWT signature
@@ -331,25 +350,25 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
     Create a JWT access token
-    
+
     Args:
         data: Dictionary containing claims to encode in the token
         expires_delta: Optional timedelta for token expiration
-        
+
     Returns:
         Encoded JWT token as string
     """
     to_encode = data.copy()
-    
+
     # Set expiration time
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     # Add expiration claim
     to_encode.update({"exp": expire})
-    
+
     # Create the token
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -381,11 +400,13 @@ access_token = create_access_token(data=token_data)
 ### 7.3 Understanding the Output
 
 When you create a token, you get something like:
+
 ```
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiZXhwIjoxNzA2MzY0MDAwfQ.abc123xyz...
 ```
 
 You can decode this at [jwt.io](https://jwt.io) to see:
+
 ```json
 {
   "sub": "user123",
@@ -407,10 +428,10 @@ from typing import Optional
 def verify_token(token: str) -> Optional[dict]:
     """
     Verify and decode a JWT token
-    
+
     Args:
         token: The JWT token string to verify
-        
+
     Returns:
         Decoded payload if valid, None if invalid
     """
@@ -432,26 +453,26 @@ from datetime import datetime
 def verify_token_detailed(token: str) -> dict:
     """
     Verify token with detailed error information
-    
+
     Returns:
         Dictionary with 'valid' boolean and 'payload' or 'error'
     """
     try:
         # Decode the token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        
+
         # Additional validation - check if token has required claims
         if "sub" not in payload:
             return {
                 "valid": False,
                 "error": "Token missing 'sub' claim"
             }
-        
+
         return {
             "valid": True,
             "payload": payload
         }
-        
+
     except ExpiredSignatureError:
         return {
             "valid": False,
@@ -511,23 +532,25 @@ result = verify_token_detailed("not.a.jwt.token")
 ### 9.1 Understanding Token Expiration
 
 **Why do tokens expire?**
+
 - **Security**: Limits damage if token is stolen
 - **Fresh data**: Forces re-authentication to get updated user info
 - **Logout enforcement**: Expired tokens can't be used
 
 **Typical Expiration Times:**
+
 - Access Token: 15-60 minutes (short-lived)
 - Refresh Token: 7-30 days (long-lived)
 
 ### 9.2 Access Token vs Refresh Token
 
-| Aspect | Access Token | Refresh Token |
-|--------|-------------|---------------|
-| **Purpose** | Access protected resources | Get new access token |
-| **Lifetime** | Short (15-60 min) | Long (7-30 days) |
-| **Storage** | Memory (or secure storage) | Secure HTTP-only cookie |
-| **Exposure** | Sent with every request | Sent only to refresh endpoint |
-| **Risk if stolen** | Limited (expires soon) | Higher (long-lived) |
+| Aspect             | Access Token               | Refresh Token                 |
+| ------------------ | -------------------------- | ----------------------------- |
+| **Purpose**        | Access protected resources | Get new access token          |
+| **Lifetime**       | Short (15-60 min)          | Long (7-30 days)              |
+| **Storage**        | Memory (or secure storage) | Secure HTTP-only cookie       |
+| **Exposure**       | Sent with every request    | Sent only to refresh endpoint |
+| **Risk if stolen** | Limited (expires soon)     | Higher (long-lived)           |
 
 ### 9.3 Implementing Refresh Tokens
 
@@ -556,11 +579,11 @@ def verify_refresh_token(token: str) -> Optional[dict]:
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        
+
         # Verify it's actually a refresh token
         if payload.get("type") != "refresh":
             return None
-            
+
         return payload
     except JWTError:
         return None
@@ -574,16 +597,16 @@ from typing import Tuple
 def login_user(username: str, password: str) -> Tuple[str, str]:
     """
     Simulate user login - returns access and refresh tokens
-    
+
     In real implementation, verify password against database
     """
     # After verifying credentials...
     user_data = {"sub": username, "email": f"{username}@example.com"}
-    
+
     # Create both tokens
     access_token = create_access_token(data=user_data)
     refresh_token = create_refresh_token(data={"sub": username})
-    
+
     return access_token, refresh_token
 
 def refresh_access_token(refresh_token: str) -> Optional[str]:
@@ -592,14 +615,14 @@ def refresh_access_token(refresh_token: str) -> Optional[str]:
     """
     # Verify the refresh token
     payload = verify_refresh_token(refresh_token)
-    
+
     if not payload:
         return None
-    
+
     # Create new access token with fresh expiration
     user_data = {"sub": payload["sub"]}
     new_access_token = create_access_token(data=user_data)
-    
+
     return new_access_token
 ```
 
@@ -727,7 +750,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    
+
     user = get_user(fake_users_db, username=token_data.username)
     if user is None:
         raise credentials_exception
@@ -804,6 +827,7 @@ curl -X GET "http://localhost:8000/users/me" \
 ### 11.1 Secret Key Management
 
 ❌ **DON'T:**
+
 ```python
 SECRET_KEY = "mysecret"  # Too simple
 SECRET_KEY = "secret123"  # Predictable
@@ -811,6 +835,7 @@ SECRET_KEY = "secret123"  # Predictable
 ```
 
 ✅ **DO:**
+
 ```python
 import os
 import secrets
@@ -827,14 +852,15 @@ if not SECRET_KEY:
 
 ### 11.2 Token Storage (Client-Side)
 
-| Storage Method | Pros | Cons | Recommendation |
-|----------------|------|------|----------------|
-| **LocalStorage** | Persistent, easy to use | Vulnerable to XSS | ❌ Avoid |
-| **SessionStorage** | Cleared on tab close | Still vulnerable to XSS | ❌ Avoid |
-| **Memory (JS variable)** | Not persistent (XSS-safe) | Lost on refresh | ✅ Best for access tokens |
-| **HTTP-only Cookie** | XSS-proof | Vulnerable to CSRF | ✅ Best for refresh tokens |
+| Storage Method           | Pros                      | Cons                    | Recommendation             |
+| ------------------------ | ------------------------- | ----------------------- | -------------------------- |
+| **LocalStorage**         | Persistent, easy to use   | Vulnerable to XSS       | ❌ Avoid                   |
+| **SessionStorage**       | Cleared on tab close      | Still vulnerable to XSS | ❌ Avoid                   |
+| **Memory (JS variable)** | Not persistent (XSS-safe) | Lost on refresh         | ✅ Best for access tokens  |
+| **HTTP-only Cookie**     | XSS-proof                 | Vulnerable to CSRF      | ✅ Best for refresh tokens |
 
 **Recommended Approach:**
+
 - Store **access token** in memory (JavaScript variable)
 - Store **refresh token** in HTTP-only, Secure, SameSite cookie
 
@@ -881,12 +907,14 @@ app.add_middleware(
 ### 11.6 Don't Put Sensitive Data in Payload
 
 ❌ **NEVER include:**
+
 - Passwords (even hashed)
 - Credit card numbers
 - Social security numbers
 - API keys or secrets
 
 ✅ **Safe to include:**
+
 - User ID
 - Username
 - Email
@@ -900,6 +928,7 @@ app.add_middleware(
 ### 12.1 Pitfall: Not Validating Token Expiration
 
 ❌ **Wrong:**
+
 ```python
 def verify_token(token: str):
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -907,6 +936,7 @@ def verify_token(token: str):
 ```
 
 ✅ **Correct:**
+
 ```python
 def verify_token(token: str):
     try:
@@ -922,6 +952,7 @@ def verify_token(token: str):
 ### 12.2 Pitfall: Using Weak Secret Keys
 
 ❌ **Wrong:**
+
 ```python
 SECRET_KEY = "secret"
 SECRET_KEY = "12345"
@@ -929,6 +960,7 @@ SECRET_KEY = "password"
 ```
 
 ✅ **Correct:**
+
 ```python
 import secrets
 # Generate once, store in environment variable
@@ -939,6 +971,7 @@ SECRET_KEY = secrets.token_urlsafe(32)
 ### 12.3 Pitfall: Not Handling Token Refresh
 
 ❌ **Wrong:**
+
 ```python
 # Access token expires after 15 minutes
 # User gets logged out and has to login again
@@ -946,6 +979,7 @@ SECRET_KEY = secrets.token_urlsafe(32)
 ```
 
 ✅ **Correct:**
+
 ```python
 # Implement refresh token mechanism
 # Silently refresh access token before expiration
@@ -955,15 +989,17 @@ SECRET_KEY = secrets.token_urlsafe(32)
 ### 12.4 Pitfall: Storing Tokens in LocalStorage
 
 ❌ **Wrong:**
+
 ```javascript
 // Client-side
-localStorage.setItem('token', accessToken);  // Vulnerable to XSS
+localStorage.setItem("token", accessToken); // Vulnerable to XSS
 ```
 
 ✅ **Correct:**
+
 ```javascript
 // Store in memory or HTTP-only cookie
-let accessToken = null;  // Memory
+let accessToken = null; // Memory
 
 // Or use HTTP-only cookie set by server
 // Client can't access it via JavaScript
@@ -972,12 +1008,14 @@ let accessToken = null;  // Memory
 ### 12.5 Pitfall: Not Validating Algorithm
 
 ❌ **Wrong:**
+
 ```python
 # Could be vulnerable to algorithm substitution attack
 payload = jwt.decode(token, SECRET_KEY)
 ```
 
 ✅ **Correct:**
+
 ```python
 # Always specify allowed algorithms
 payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
@@ -988,6 +1026,7 @@ payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
 **The Problem:** JWTs are stateless - you can't "delete" them from the server.
 
 **Solutions:**
+
 1. **Keep tokens short-lived** (15-30 min)
 2. **Token blacklist** (store revoked tokens in Redis with expiration)
 3. **Token versioning** (increment user's token version on logout)
@@ -1022,12 +1061,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 Create a file called `jwt_utils.py` with the following functions:
 
 **Requirements:**
+
 1. `generate_secret_key()`: Generate a secure random secret key
 2. `create_token(user_id: str, expires_in: int = 3600)`: Create a token with user_id that expires in specified seconds
 3. `decode_token(token: str)`: Decode and return token payload or None if invalid
 4. `is_token_expired(token: str)`: Check if token is expired (return True/False)
 
 **Test cases:**
+
 ```python
 # Test 1: Create and decode token
 token = create_token("user123")
@@ -1050,6 +1091,7 @@ assert decode_token("invalid.token.here") is None
 Build a complete authentication system with the following features:
 
 **Requirements:**
+
 1. User registration endpoint (`POST /register`)
    - Accept username, email, password
    - Hash password before storing
@@ -1068,6 +1110,7 @@ Build a complete authentication system with the following features:
    - Return new access token
 
 **Database Schema (use dict for simplicity):**
+
 ```python
 users_db = {
     "user_id": {
@@ -1080,6 +1123,7 @@ users_db = {
 ```
 
 **Expected API Flow:**
+
 ```
 1. POST /register {"username": "alice", "email": "alice@test.com", "password": "pass123"}
    → Response: {"message": "User created successfully"}
@@ -1102,6 +1146,7 @@ users_db = {
 Extend Assignment 2 to implement role-based access control (RBAC).
 
 **Requirements:**
+
 1. Add `roles` field to user (e.g., ["user"], ["user", "admin"])
 2. Include roles in JWT token payload
 3. Create role-checking dependencies:
@@ -1114,6 +1159,7 @@ Extend Assignment 2 to implement role-based access control (RBAC).
    - `GET /user/dashboard` - Accessible by any authenticated user
 
 **Example:**
+
 ```python
 @app.get("/admin/users")
 async def list_users(current_user: User = Depends(require_role("admin"))):
@@ -1125,6 +1171,7 @@ async def dashboard(current_user: User = Depends(get_current_user)):
 ```
 
 **Test Cases:**
+
 ```python
 # Test 1: Admin can access /admin/users
 admin_token = create_token_with_role("admin_user", ["admin"])
@@ -1145,6 +1192,7 @@ user_token = create_token_with_role("regular_user", ["user"])
 Implement a token revocation system using an in-memory blacklist.
 
 **Requirements:**
+
 1. Create a `TokenBlacklist` class:
    - `add_token(token: str, expires_at: datetime)`: Add token to blacklist
    - `is_blacklisted(token: str) -> bool`: Check if token is blacklisted
@@ -1157,19 +1205,20 @@ Implement a token revocation system using an in-memory blacklist.
    - Check if token is blacklisted before processing
 
 **Implementation:**
+
 ```python
 class TokenBlacklist:
     def __init__(self):
         self.blacklist = {}  # {token: expires_at}
-    
+
     def add_token(self, token: str, expires_at: datetime):
         # TODO: Implement
         pass
-    
+
     def is_blacklisted(self, token: str) -> bool:
         # TODO: Implement
         pass
-    
+
     def cleanup_expired(self):
         # TODO: Implement
         pass
@@ -1189,6 +1238,7 @@ async def logout(token: str = Depends(oauth2_scheme)):
 Create a production-ready JWT authentication module.
 
 **File Structure:**
+
 ```
 jwt_auth/
 ├── __init__.py
@@ -1202,6 +1252,7 @@ jwt_auth/
 **Requirements:**
 
 **config.py:**
+
 ```python
 from pydantic_settings import BaseSettings
 
@@ -1210,12 +1261,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    
+
     class Config:
         env_file = ".env"
 ```
 
 **Features to implement:**
+
 1. Environment-based configuration
 2. Password hashing with bcrypt
 3. Access and refresh token generation
@@ -1229,6 +1281,7 @@ class Settings(BaseSettings):
 
 **Testing:**
 Write tests for all endpoints using `pytest` and `httpx`:
+
 ```python
 def test_register_user():
     # TODO: Test user registration
@@ -1256,19 +1309,23 @@ def test_refresh_token():
 ## 14. Additional Resources
 
 ### Documentation
+
 - [RFC 7519 - JSON Web Token (JWT)](https://tools.ietf.org/html/rfc7519)
 - [python-jose Documentation](https://python-jose.readthedocs.io/)
 - [FastAPI Security Documentation](https://fastapi.tiangolo.com/tutorial/security/)
 
 ### Tools
+
 - [JWT.io Debugger](https://jwt.io/) - Decode and verify JWTs
 - [mkjwk.org](https://mkjwk.org/) - Generate JSON Web Keys
 
 ### Further Reading
+
 - [OWASP JWT Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)
 - [Auth0 JWT Handbook](https://auth0.com/resources/ebooks/jwt-handbook)
 
 ### Video Tutorials
+
 - FastAPI JWT Authentication (Tech With Tim)
 - Understanding JWT (Traversy Media)
 
@@ -1351,6 +1408,6 @@ def test_refresh_token():
 
 ---
 
-*Last Updated: January 2026*  
-*Author: [Your Name]*  
-*Version: 1.0*
+_Last Updated: January 2026_  
+_Author: [Your Name]_  
+_Version: 1.0_

@@ -35,7 +35,7 @@ class User(Base):
     hashed_password = Column(String(100), nullable=False)
     full_name = Column(String(100), nullable=True)
     phone_number = Column(String(15), nullable=True)
-    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.USER, server_default='user')
+    role = Column(SQLEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=UserRole.USER, server_default='user')
     is_active = Column(Boolean, default= False)
     address = Column(String(200), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default= func.now())

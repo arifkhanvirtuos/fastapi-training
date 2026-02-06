@@ -9,8 +9,9 @@ This directory now includes a complete **Role-Based Access Control (RBAC)** syst
 ## 📚 Documentation Files
 
 ### 1. **RBAC_AUTHORIZATION_GUIDE.md**
+
 - **Duration**: 1-hour learning module
-- **Content**: 
+- **Content**:
   - Complete RBAC concepts and theory
   - Implementation patterns
   - Best practices
@@ -23,6 +24,7 @@ This directory now includes a complete **Role-Based Access Control (RBAC)** syst
   - User permissions model
 
 ### 2. **RBAC_TESTING_GUIDE.md**
+
 - **Quick Start**: Step-by-step testing instructions
 - **Content**:
   - How to run migrations
@@ -39,11 +41,13 @@ This directory now includes a complete **Role-Based Access Control (RBAC)** syst
 ### Modified Files
 
 #### 1. **models.py**
+
 - ✅ Added `UserRole` enum (admin, manager, user, guest)
 - ✅ Added `role` column to User model
 - ✅ Set default role to `user`
 
 #### 2. **auth.py**
+
 - ✅ Added `Permission` enum for fine-grained access control
 - ✅ Implemented `ROLE_PERMISSIONS` mapping
 - ✅ Created role checker functions:
@@ -56,11 +60,13 @@ This directory now includes a complete **Role-Based Access Control (RBAC)** syst
   - `has_higher_or_equal_role(user, role)`
 
 #### 3. **schemas.py**
+
 - ✅ Added `role` field to `UserCreate` schema
 - ✅ Added `role` field to `UserResponse` schema
 - ✅ Imported `UserRole` enum
 
 #### 4. **main.py**
+
 - ✅ Updated registration endpoint to support roles
 - ✅ Added 11 new RBAC-protected endpoints:
   - `GET /admin/users` - List all users (Admin only)
@@ -75,6 +81,7 @@ This directory now includes a complete **Role-Based Access Control (RBAC)** syst
   - `POST /admin/create-admin` - Create admin (Admin only)
 
 #### 5. **Alembic Migration**
+
 - ✅ Created migration: `803697d6f77b_add_role_to_users.py`
 - ✅ Adds `role` column with ENUM type
 - ✅ Sets default value to 'user'
@@ -84,29 +91,32 @@ This directory now includes a complete **Role-Based Access Control (RBAC)** syst
 ## 🚀 Quick Start
 
 ### 1. Apply Migration
+
 ```bash
 cd /Users/virtuosdigital/Arif/fastapilearning/sql_app
 /Users/virtuosdigital/Arif/fastapilearning/venv/bin/python -m alembic upgrade head
 ```
 
 ### 2. Start Server
+
 ```bash
 /Users/virtuosdigital/Arif/fastapilearning/venv/bin/python -m uvicorn main:app --reload
 ```
 
 ### 3. Access Docs
+
 Open: `http://localhost:8000/docs`
 
 ---
 
 ## 👥 User Roles
 
-| Role | Level | Description |
-|------|-------|-------------|
-| **Admin** | 4 | Full system access, can manage users and roles |
-| **Manager** | 3 | Elevated access, can manage users and view reports |
-| **User** | 2 | Standard access, own resources only |
-| **Guest** | 1 | Limited read-only access |
+| Role        | Level | Description                                        |
+| ----------- | ----- | -------------------------------------------------- |
+| **Admin**   | 4     | Full system access, can manage users and roles     |
+| **Manager** | 3     | Elevated access, can manage users and view reports |
+| **User**    | 2     | Standard access, own resources only                |
+| **Guest**   | 1     | Limited read-only access                           |
 
 ---
 
@@ -115,22 +125,26 @@ Open: `http://localhost:8000/docs`
 ### Permission Categories
 
 #### User Permissions
+
 - `read:users` - View user list
 - `create:users` - Create new users
 - `update:users` - Update user information
 - `delete:users` - Delete users
 
 #### Product Permissions
+
 - `read:products` - View products
 - `create:products` - Create products
 - `update:products` - Update products
 - `delete:products` - Delete products
 
 #### Report Permissions
+
 - `read:reports` - View reports
 - `export:data` - Export data
 
 #### Admin Permissions
+
 - `manage:roles` - Manage user roles
 - `view:audit_logs` - View audit logs
 
@@ -138,20 +152,20 @@ Open: `http://localhost:8000/docs`
 
 ## 📊 Permission Matrix
 
-| Permission | Guest | User | Manager | Admin |
-|------------|-------|------|---------|-------|
-| read:products | ✅ | ✅ | ✅ | ✅ |
-| read:reports | ❌ | ✅ | ✅ | ✅ |
-| read:users | ❌ | ❌ | ✅ | ✅ |
-| create:products | ❌ | ❌ | ✅ | ✅ |
-| update:products | ❌ | ❌ | ✅ | ✅ |
-| update:users | ❌ | ❌ | ✅ | ✅ |
-| export:data | ❌ | ❌ | ✅ | ✅ |
-| create:users | ❌ | ❌ | ❌ | ✅ |
-| delete:users | ❌ | ❌ | ❌ | ✅ |
-| delete:products | ❌ | ❌ | ❌ | ✅ |
-| manage:roles | ❌ | ❌ | ❌ | ✅ |
-| view:audit_logs | ❌ | ❌ | ❌ | ✅ |
+| Permission      | Guest | User | Manager | Admin |
+| --------------- | ----- | ---- | ------- | ----- |
+| read:products   | ✅    | ✅   | ✅      | ✅    |
+| read:reports    | ❌    | ✅   | ✅      | ✅    |
+| read:users      | ❌    | ❌   | ✅      | ✅    |
+| create:products | ❌    | ❌   | ✅      | ✅    |
+| update:products | ❌    | ❌   | ✅      | ✅    |
+| update:users    | ❌    | ❌   | ✅      | ✅    |
+| export:data     | ❌    | ❌   | ✅      | ✅    |
+| create:users    | ❌    | ❌   | ❌      | ✅    |
+| delete:users    | ❌    | ❌   | ❌      | ✅    |
+| delete:products | ❌    | ❌   | ❌      | ✅    |
+| manage:roles    | ❌    | ❌   | ❌      | ✅    |
+| view:audit_logs | ❌    | ❌   | ❌      | ✅    |
 
 ---
 
@@ -236,25 +250,30 @@ async def delete_user(
 ## 🎯 Key Features
 
 ### 1. **Hierarchical Roles**
+
 - Roles have a hierarchy (Admin > Manager > User > Guest)
 - Higher roles inherit lower role permissions
 
 ### 2. **Fine-Grained Permissions**
+
 - Each role has specific permissions
 - Permission-based access control available
 - Easy to add new permissions
 
 ### 3. **Flexible Dependencies**
+
 - Multiple ways to protect endpoints
 - Composable dependencies
 - Reusable across application
 
 ### 4. **Self-Protection**
+
 - Users cannot delete themselves
 - Users cannot deactivate themselves
 - Admins can only be created by other admins
 
 ### 5. **Resource Ownership**
+
 - Users can only view/edit their own resources
 - Managers/Admins can access all resources
 - Clear separation of access
@@ -268,6 +287,7 @@ See **RBAC_AUTHORIZATION_GUIDE.md** for a complete practice assignment:
 ### Assignment: Task Management System with RBAC
 
 **Requirements:**
+
 - Create Task model with ownership
 - Implement role-based task access
 - Different permissions for each role
@@ -276,6 +296,7 @@ See **RBAC_AUTHORIZATION_GUIDE.md** for a complete practice assignment:
 - Statistics endpoint (Manager+)
 
 **Deliverables:**
+
 - Working code implementation
 - API documentation
 - Test cases for each role
@@ -297,11 +318,13 @@ See **RBAC_AUTHORIZATION_GUIDE.md** for a complete practice assignment:
 ## 📝 Next Steps
 
 ### Immediate
+
 1. Run the migration
 2. Test all endpoints with different roles
 3. Complete the practice assignment
 
 ### Future Enhancements
+
 1. Add audit logging for admin actions
 2. Implement email notifications for role changes
 3. Add two-factor authentication for admins
