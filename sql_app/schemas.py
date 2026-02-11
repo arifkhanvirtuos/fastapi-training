@@ -76,6 +76,8 @@ class UserResponse(UserBase):
     id: uuid.UUID
     role: UserRole
     is_active: bool
+    profile_picture_url: Optional[str] = None
+    profile_picture_thumbnail_url: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -87,7 +89,9 @@ class UserResponse(UserBase):
                 "full_name": "John Doe",
                 "phone_number": "+1234567890",
                 "role": "user",
-                "is_active": True
+                "is_active": True,
+                "profile_picture_url": "users/123/2024/01/abc-123.jpg",
+                "profile_picture_thumbnail_url": "users/123/2024/01/abc-123_thumb.jpg"
             }
         }
 
@@ -127,5 +131,21 @@ class MessageResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "message": "Operation successful"
+            }
+        }
+
+
+class ProfilePictureUploadResponse(BaseModel):
+    """Response schema for profile picture upload."""
+    message: str
+    profile_picture_url: str
+    thumbnail_url: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Profile picture uploaded successfully",
+                "profile_picture_url": "users/123/2024/01/abc-123.jpg",
+                "thumbnail_url": "users/123/2024/01/abc-123_thumb.jpg"
             }
         }

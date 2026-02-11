@@ -38,6 +38,8 @@ class User(Base):
     role = Column(SQLEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=UserRole.USER, server_default='user')
     is_active = Column(Boolean, default= False)
     address = Column(String(200), nullable=True)
+    profile_picture_url = Column(String(500), nullable=True)
+    profile_picture_thumbnail_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default= func.now())
     updated_at = Column(DateTime, nullable=False, server_default= func.now(), onupdate= func.now())
     profile = relationship("UserProfile", back_populates="user", uselist=False)

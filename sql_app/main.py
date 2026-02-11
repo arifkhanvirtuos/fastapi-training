@@ -1,7 +1,7 @@
 from typing import Union, Optional, List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, Header, Request, Response, status, BackgroundTasks, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import FastAPI, Depends, HTTPException, Header, Request, Response, status, BackgroundTasks, WebSocket, WebSocketDisconnect, File, UploadFile
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from database import get_db, init_db
 from pydantic import BaseModel, EmailStr, ValidationError
@@ -21,8 +21,18 @@ import uuid
 import time
 import json
 import asyncio
+import aiofiles
+import imghdr
+import io
+from pathlib import Path
+from PIL import Image
 from jose import jwt, JWTError
 from datetime import timedelta, datetime, timezone
+
+# Import Redis client and caching utilities
+from redis_client import RedisClient
+from cache_utils import CacheMetrics, cache_result, cache_evict, TaggedCache
+from session_manager import SessionManager
 
 # Import OAuth2 authentication utilities
 from auth import (
@@ -49,7 +59,8 @@ from schemas import (
     UserResponse,
     UserUpdate,
     RefreshTokenRequest,
-    MessageResponse
+    MessageResponse,
+    ProfilePictureUploadResponse
 )
 
 class Item(BaseModel):
@@ -102,18 +113,32 @@ def run_migrations():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup code
-    print("Starting up...")
-    print("Running database migrations...")
+    print("🚀 Starting up...")
+    print("📦 Running database migrations...")
+    
     try:
         run_migrations()
-        print("Migrations completed successfully!")
+        print("✅ Migrations completed successfully!")
     except Exception as e:
-        print(f"Migration error: {e}")
-        # Optionally, you can still start the app or raise the exception
-        # raise e
+        print(f"⚠️  Migration error: {e}")
+    
+    # Initialize Redis
+    print("🔴 Connecting to Redis...")
+    app.state.redis = RedisClient()
+    try:
+        await app.state.redis.connect()
+        print("✅ Redis connected successfully!")
+    except Exception as e:
+        print(f"⚠️  Redis connection failed: {e}")
+        print("⚠️  Running without Redis caching")
+        app.state.redis = None
+    
     yield
+    
     # Shutdown code
-    print("Shutting down...")
+    print("🛑 Shutting down...")
+    if app.state.redis:
+        await app.state.redis.disconnect()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -121,9 +146,14 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
+# Redis dependency
+async def get_redis() -> Optional[RedisClient]:
+    """Get Redis client from app state"""
+    redis = getattr(app.state, 'redis', None)
+    return redis
 
 
-
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
@@ -879,6 +909,390 @@ async def get_protected_data(current_user: User = Depends(get_current_active_use
         "user_email": current_user.email,
         "access_granted": True
     }
+
+
+# ==================== FILE UPLOAD CONFIGURATION ====================
+
+# Create upload directory
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+# File upload settings
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
+# ==================== FILE VALIDATION HELPERS ====================
+
+async def validate_image_file(file: UploadFile) -> str:
+    """
+    Validate image file by reading magic bytes.
+    More secure than checking MIME type or extension.
+    Returns: image type (jpeg, png, gif, webp)
+    """
+    # Read first 512 bytes for magic number check
+    header = await file.read(512)
+    await file.seek(0)
+    
+    # Detect image type from content
+    image_type = imghdr.what(None, h=header)
+    
+    if image_type not in ['jpeg', 'png', 'gif', 'webp']:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image file. Only JPEG, PNG, GIF, and WebP are allowed."
+        )
+    
+    return image_type
+
+
+async def validate_upload_file(
+    file: UploadFile,
+    max_size: int = MAX_FILE_SIZE,
+    allowed_types: set = ALLOWED_CONTENT_TYPES
+):
+    """
+    Comprehensive file validation:
+    - Content type
+    - File extension
+    - File size
+    - Magic bytes (actual file content)
+    """
+    # Validate content type
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid content type: {file.content_type}. Allowed: {allowed_types}"
+        )
+    
+    # Validate extension
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file extension: {ext}. Allowed: {ALLOWED_EXTENSIONS}"
+        )
+    
+    # Validate actual file content (magic bytes)
+    await validate_image_file(file)
+    
+    # Validate size
+    contents = await file.read()
+    if len(contents) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large: {len(contents)} bytes. Max size: {max_size} bytes ({max_size / (1024*1024):.1f} MB)"
+        )
+    
+    # Reset file pointer
+    await file.seek(0)
+    
+    return True
+
+
+# ==================== FILE STORAGE HELPERS ====================
+
+def get_upload_path(user_id: str, file_type: str = "profile_pictures") -> Path:
+    """
+    Organize files by user and date.
+    Structure: uploads/{user_id}/{year}/{month}/{file}
+    """
+    now = datetime.now()
+    upload_path = (
+        UPLOAD_DIR / 
+        str(user_id) / 
+        str(now.year) / 
+        f"{now.month:02d}"
+    )
+    upload_path.mkdir(parents=True, exist_ok=True)
+    return upload_path
+
+
+async def process_image(file: UploadFile, max_size: tuple = (1000, 1000)) -> bytes:
+    """
+    Process image: resize, convert to RGB, optimize.
+    Returns: processed image as bytes
+    """
+    # Read uploaded file
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    
+    # Convert to RGB (removes alpha channel)
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    
+    # Resize image (maintain aspect ratio)
+    image.thumbnail(max_size, Image.Resampling.LANCZOS)
+    
+    # Save to bytes
+    output = io.BytesIO()
+    image.save(output, format='JPEG', quality=85, optimize=True)
+    output.seek(0)
+    
+    return output.getvalue()
+
+
+async def create_thumbnail(file: UploadFile, size: tuple = (200, 200)) -> bytes:
+    """
+    Create square thumbnail from uploaded image.
+    Returns: thumbnail as bytes
+    """
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    
+    # Convert to RGB
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    
+    # Create thumbnail (maintains aspect ratio)
+    image.thumbnail(size, Image.Resampling.LANCZOS)
+    
+    # Save to bytes
+    output = io.BytesIO()
+    image.save(output, format='JPEG', quality=85, optimize=True)
+    output.seek(0)
+    
+    return output.getvalue()
+
+
+async def save_with_thumbnail(file: UploadFile, user_id: str) -> dict:
+    """
+    Save original processed image and thumbnail.
+    Returns: dict with paths to both files
+    """
+    # Get upload path
+    upload_path = get_upload_path(user_id, "profile_pictures")
+    
+    # Generate unique filenames
+    unique_id = uuid.uuid4()
+    original_filename = f"{unique_id}.jpg"
+    thumbnail_filename = f"{unique_id}_thumb.jpg"
+    
+    original_path = upload_path / original_filename
+    thumbnail_path = upload_path / thumbnail_filename
+    
+    # Process and save original
+    processed_image = await process_image(file, max_size=(1000, 1000))
+    async with aiofiles.open(original_path, 'wb') as f:
+        await f.write(processed_image)
+    
+    # Reset file pointer
+    await file.seek(0)
+    
+    # Create and save thumbnail
+    thumbnail_image = await create_thumbnail(file, size=(200, 200))
+    async with aiofiles.open(thumbnail_path, 'wb') as f:
+        await f.write(thumbnail_image)
+    
+    # Return relative paths for database storage
+    return {
+        "original": str(original_path.relative_to(UPLOAD_DIR)),
+        "thumbnail": str(thumbnail_path.relative_to(UPLOAD_DIR))
+    }
+
+
+async def delete_user_pictures(user: User):
+    """
+    Delete user's profile pictures from disk.
+    """
+    if user.profile_picture_url:
+        original_path = UPLOAD_DIR / user.profile_picture_url
+        if original_path.exists():
+            original_path.unlink()
+    
+    if user.profile_picture_thumbnail_url:
+        thumbnail_path = UPLOAD_DIR / user.profile_picture_thumbnail_url
+        if thumbnail_path.exists():
+            thumbnail_path.unlink()
+
+
+# ==================== FILE UPLOAD ENDPOINTS ====================
+
+@app.post(
+    "/users/me/profile-picture",
+    response_model=ProfilePictureUploadResponse,
+    tags=["File Upload"],
+    summary="Upload Profile Picture",
+    description="Upload a profile picture for the authenticated user. Supports JPEG, PNG, GIF, and WebP formats. Max size: 5MB."
+)
+async def upload_profile_picture(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload and process profile picture for authenticated user.
+    
+    Features:
+    - Validates file type, size, and content
+    - Resizes to max 1000x1000 (maintains aspect ratio)
+    - Creates 200x200 thumbnail
+    - Converts to JPEG format
+    - Optimizes for web (85% quality)
+    - Deletes old profile pictures if they exist
+    
+    **Requirements:**
+    - Authentication required (Bearer token)
+    - File must be image (JPEG, PNG, GIF, WebP)
+    - Max file size: 5MB
+    
+    **Returns:**
+    - Success message
+    - URL to full-size profile picture
+    - URL to thumbnail
+    """
+    try:
+        # Validate uploaded file
+        await validate_upload_file(file)
+        
+        # Delete old profile pictures if they exist
+        await delete_user_pictures(current_user)
+        
+        # Save new pictures
+        paths = await save_with_thumbnail(file, str(current_user.id))
+        
+        # Update user record in database
+        current_user.profile_picture_url = paths["original"]
+        current_user.profile_picture_thumbnail_url = paths["thumbnail"]
+        db.commit()
+        db.refresh(current_user)
+        
+        return ProfilePictureUploadResponse(
+            message="Profile picture uploaded successfully",
+            profile_picture_url=paths["original"],
+            thumbnail_url=paths["thumbnail"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading profile picture: {str(e)}"
+        )
+
+
+@app.get(
+    "/users/{user_id}/profile-picture",
+    tags=["File Upload"],
+    summary="Get Profile Picture",
+    description="Download user's profile picture (full size or thumbnail)"
+)
+async def get_profile_picture(
+    user_id: uuid.UUID,
+    size: str = "full",
+    db: Session = Depends(get_db)
+):
+    """
+    Get user's profile picture.
+    
+    **Parameters:**
+    - user_id: UUID of the user
+    - size: "full" or "thumbnail" (default: "full")
+    
+    **Returns:**
+    - Image file (JPEG format)
+    
+    **Errors:**
+    - 404: User not found or no profile picture
+    - 400: Invalid size parameter
+    """
+    # Validate size parameter
+    if size not in ["full", "thumbnail"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid size parameter. Must be 'full' or 'thumbnail'"
+        )
+    
+    # Get user from database
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    
+    # Get appropriate file path
+    if size == "thumbnail":
+        file_url = user.profile_picture_thumbnail_url
+    else:
+        file_url = user.profile_picture_url
+    
+    if not file_url:
+        raise HTTPException(
+            status_code=404,
+            detail="No profile picture found for this user"
+        )
+    
+    # Construct file path
+    file_path = UPLOAD_DIR / file_url
+    
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Profile picture file not found on server"
+        )
+    
+    # Return file
+    return FileResponse(
+        path=file_path,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600"  # Cache for 1 hour
+        }
+    )
+
+
+@app.delete(
+    "/users/me/profile-picture",
+    response_model=MessageResponse,
+    tags=["File Upload"],
+    summary="Delete Profile Picture",
+    description="Delete the authenticated user's profile picture"
+)
+async def delete_profile_picture(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete profile picture for authenticated user.
+    
+    **Requirements:**
+    - Authentication required (Bearer token)
+    
+    **Returns:**
+    - Success message
+    
+    **Errors:**
+    - 404: No profile picture to delete
+    """
+    if not current_user.profile_picture_url:
+        raise HTTPException(
+            status_code=404,
+            detail="No profile picture to delete"
+        )
+    
+    try:
+        # Delete files from disk
+        await delete_user_pictures(current_user)
+        
+        # Update database
+        current_user.profile_picture_url = None
+        current_user.profile_picture_thumbnail_url = None
+        db.commit()
+        
+        return MessageResponse(
+            message="Profile picture deleted successfully"
+        )
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting profile picture: {str(e)}"
+        )
 
 
 # OLD TOKEN VERIFICATION - REPLACED BY OAuth2 functions in auth.py
@@ -2956,6 +3370,397 @@ async def authenticated_websocket_test_page():
     - Password: admin123
     """
     return HTMLResponse(content=authenticated_websocket_html, status_code=200)
+
+
+# ============================================================================
+# REDIS CACHING ENDPOINTS
+# ============================================================================
+
+@app.get("/users-cached", response_model=list[UserResponse], tags=["Caching - Users"])
+async def list_users_cached(
+    skip: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    redis: Optional[RedisClient] = Depends(get_redis)
+) -> list[UserResponse]:
+    """
+    List users with Redis caching (Cache-Aside pattern)
+    
+    - **Cache key:** users:list:{skip}:{limit}
+    - **Cache duration:** 30 minutes
+    - **First request:** Queries database (~100ms)
+    - **Subsequent requests:** Redis cache (~1ms)
+    """
+    cache_key = f"users:list:{skip}:{limit}"
+    
+    # Try cache first
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            await CacheMetrics(redis).record_hit(cache_key)
+            return [UserResponse(**u) for u in json.loads(cached)]
+        await CacheMetrics(redis).record_miss(cache_key)
+    
+    # Cache miss - query database
+    users = db.query(User).offset(skip).limit(limit).all()
+    
+    # Store in cache
+    if redis and users:
+        await redis.set(
+            cache_key,
+            [u.to_dict() for u in users],
+            ex=1800  # 30 minutes
+        )
+    
+    return users
+
+
+@app.get("/users-cached/{user_id}", response_model=UserResponse, tags=["Caching - Users"])
+async def get_user_cached(
+    user_id: str,
+    db: Session = Depends(get_db),
+    redis: Optional[RedisClient] = Depends(get_redis)
+) -> UserResponse:
+    """
+    Get single user with Redis caching (Cache-Aside pattern)
+    
+    - **Cache key:** user:{user_id}
+    - **Cache duration:** 1 hour
+    - **First request:** Queries database (~100ms)
+    - **Subsequent requests:** Redis cache (~1ms)
+    """
+    cache_key = f"user:{user_id}"
+    
+    # Try cache first
+    if redis:
+        cached = await redis.get(cache_key)
+        if cached:
+            await CacheMetrics(redis).record_hit(cache_key)
+            return UserResponse(**json.loads(cached))
+        await CacheMetrics(redis).record_miss(cache_key)
+    
+    # Cache miss - query database
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Store in cache
+    if redis:
+        await redis.set(
+            cache_key,
+            user.to_dict(),
+            ex=3600  # 1 hour
+        )
+    
+    return user
+
+
+@app.put("/users-cached/{user_id}", response_model=UserResponse, tags=["Caching - Users"])
+async def update_user_cached(
+    user_id: str,
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+    redis: Optional[RedisClient] = Depends(get_redis)
+) -> UserResponse:
+    """
+    Update user and invalidate cache (Write-Through pattern)
+    
+    - Updates database
+    - Invalidates all related cache entries
+    - Returns fresh data from database
+    
+    **Cache invalidation:**
+    - Deletes: user:{user_id}
+    - Deletes: users:list:*
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update database
+    for field, value in user_update.dict(exclude_unset=True).items():
+        setattr(user, field, value)
+    
+    db.commit()
+    db.refresh(user)
+    
+    # Invalidate cache
+    if redis:
+        await redis.delete(f"user:{user_id}")
+        deleted = await redis.delete_pattern("users:list:*")
+        print(f"🗑️  Invalidated {deleted} cache entries for user {user_id}")
+    
+    return user
+
+
+@app.post("/admin/cache/warm", tags=["Admin - Caching"])
+async def warm_cache(
+    db: Session = Depends(get_db),
+    redis: Optional[RedisClient] = Depends(get_redis),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Warm cache with all active users (Admin only)
+    
+    Pre-populate Redis with frequently accessed user data
+    for better performance on subsequent requests.
+    
+    **Requirements:**
+    - Admin role required
+    
+    **Behavior:**
+    - Caches all active users
+    - Sets 1-hour TTL
+    - Returns count of users cached
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Redis not available"
+        )
+    
+    # Fetch all active users
+    users = db.query(User).filter(User.is_active == True).all()
+    
+    # Cache each user
+    for user in users:
+        await redis.set(
+            f"user:{user.id}",
+            user.to_dict(),
+            ex=3600  # 1 hour
+        )
+    
+    return {
+        "message": f"✅ Cached {len(users)} active users",
+        "count": len(users),
+        "ttl_seconds": 3600
+    }
+
+
+@app.get("/admin/cache/stats", tags=["Admin - Caching"])
+async def get_cache_stats(
+    redis: Optional[RedisClient] = Depends(get_redis),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Get cache performance statistics (Admin only)
+    
+    Shows cache hit/miss ratios and memory usage
+    
+    **Returns:**
+    - hits: Number of cache hits
+    - misses: Number of cache misses
+    - total_requests: Total cache requests
+    - hit_ratio_percent: Cache hit percentage
+    - memory_usage_mb: Current Redis memory usage
+    - max_memory_mb: Max allowed Redis memory
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Redis not available"
+        )
+    
+    metrics = CacheMetrics(redis)
+    stats = await metrics.get_stats()
+    
+    # Get Redis memory info
+    info = await redis.info("memory")
+    
+    return {
+        **stats,
+        "memory_usage_mb": round(info.get("used_memory", 0) / 1024 / 1024, 2),
+        "max_memory_mb": round(info.get("maxmemory", 0) / 1024 / 1024, 2) if info.get("maxmemory") else "unlimited"
+    }
+
+
+@app.post("/admin/cache/clear", tags=["Admin - Caching"])
+async def clear_cache_entries(
+    pattern: str = "*",
+    redis: Optional[RedisClient] = Depends(get_redis),
+    current_user: User = Depends(require_admin)
+):
+    """
+    Clear cache entries matching pattern (Admin only)
+    
+    Example patterns:
+    - "*" - Clear all cache
+    - "user:*" - Clear all user caches
+    - "users:list:*" - Clear all user list caches
+    
+    **Caution:** Clearing all cache (*) will impact performance!
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Redis not available"
+        )
+    
+    deleted = await redis.delete_pattern(pattern)
+    
+    return {
+        "message": f"✅ Deleted {deleted} cache entries",
+        "pattern": pattern,
+        "deleted_count": deleted
+    }
+
+
+@app.post("/admin/cache/metrics/reset", tags=["Admin - Caching"])
+async def reset_cache_metrics(
+    redis: Optional[RedisClient] = Depends(get_redis),
+    current_user: User = Depends(require_admin)
+):
+    """Reset cache hit/miss metrics (Admin only)"""
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Redis not available"
+        )
+    
+    metrics = CacheMetrics(redis)
+    await metrics.reset()
+    
+    return {"message": "✅ Cache metrics reset"}
+
+
+# ============================================================================
+# REDIS SESSION STORAGE ENDPOINTS
+# ============================================================================
+
+@app.post("/auth/login-with-session", tags=["Sessions - Redis"])
+async def login_with_session(
+    credentials: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+    redis: Optional[RedisClient] = Depends(get_redis),
+    request: Request = None
+):
+    """
+    Login and create Redis-based session
+    
+    Returns a session_id to be used in subsequent requests
+    instead of JWT tokens.
+    
+    **Session Features:**
+    - Stored in Redis (fast, in-memory)
+    - 24-hour expiration (configurable)
+    - IP address and user-agent tracked
+    - Support for multiple concurrent sessions
+    
+    **Returns:**
+    - session_id: Use in header for authenticated requests
+    - expires_in_seconds: Session TTL
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Session service not available"
+        )
+    
+    # Authenticate user
+    user = authenticate_user(db, credentials.username, credentials.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Create session
+    manager = SessionManager(redis)
+    
+    session_data = {
+        "ip_address": request.client.host if request else None,
+        "user_agent": request.headers.get("user-agent") if request else None,
+    }
+    
+    session_id = await manager.create_session(str(user.id), session_data)
+    
+    return {
+        "session_id": session_id,
+        "user_id": str(user.id),
+        "user_email": user.email,
+        "expires_in_seconds": 86400,
+        "message": "✅ Session created successfully"
+    }
+
+
+@app.get("/auth/session-info", tags=["Sessions - Redis"])
+async def get_session_info(
+    session_id: str = Header(...),
+    redis: Optional[RedisClient] = Depends(get_redis)
+):
+    """
+    Get current session information
+    
+    **Parameters:**
+    - session_id: Provide in header
+    
+    **Returns:**
+    - Complete session data including user_id, creation time, last activity
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Session service not available"
+        )
+    
+    manager = SessionManager(redis)
+    session = await manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    
+    # Update activity (extends TTL)
+    await manager.update_activity(session_id)
+    
+    return session
+
+
+@app.post("/auth/logout-session", tags=["Sessions - Redis"])
+async def logout_session(
+    session_id: str = Header(...),
+    redis: Optional[RedisClient] = Depends(get_redis)
+):
+    """
+    Logout and destroy session
+    
+    **Parameters:**
+    - session_id: Provide in header
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Session service not available"
+        )
+    
+    manager = SessionManager(redis)
+    if await manager.destroy_session(session_id):
+        return {"message": "✅ Logged out successfully"}
+    
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+@app.post("/auth/logout-everywhere", tags=["Sessions - Redis"])
+async def logout_everywhere(
+    current_user: User = Depends(get_current_active_user),
+    redis: Optional[RedisClient] = Depends(get_redis)
+):
+    """
+    Logout from all devices (destroy all sessions)
+    
+    Logs out user from every device/session simultaneously.
+    Useful for security when password is compromised.
+    """
+    if not redis:
+        raise HTTPException(
+            status_code=503,
+            detail="Session service not available"
+        )
+    
+    manager = SessionManager(redis)
+    destroyed = await manager.destroy_all_user_sessions(str(current_user.id))
+    
+    return {
+        "message": f"✅ Logged out from {destroyed} session(s)",
+        "sessions_destroyed": destroyed
+    }
+
 
 
 # ============================================================================
