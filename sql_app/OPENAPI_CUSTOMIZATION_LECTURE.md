@@ -1,9 +1,11 @@
 # OpenAPI Customization & API Documentation Best Practices
+
 ## Comprehensive 1-Hour FastAPI Lecture
 
 ---
 
 ## 📋 Table of Contents
+
 1. [Introduction to OpenAPI](#1-introduction-to-openapi) (5 min)
 2. [Customizing OpenAPI Schema](#2-customizing-openapi-schema) (15 min)
 3. [Adding Descriptions and Examples](#3-adding-descriptions-and-examples) (15 min)
@@ -15,11 +17,13 @@
 ---
 
 ## 1. Introduction to OpenAPI
+
 **Duration: 5 minutes**
 
 ### What is OpenAPI?
 
 OpenAPI (formerly Swagger) is a specification for describing RESTful APIs. FastAPI automatically generates:
+
 - **Interactive API documentation** (Swagger UI at `/docs`)
 - **Alternative documentation** (ReDoc at `/redoc`)
 - **OpenAPI schema** (JSON at `/openapi.json`)
@@ -49,6 +53,7 @@ app = FastAPI(
 ```
 
 **Benefits:**
+
 - ✅ Professional appearance
 - ✅ Better developer experience
 - ✅ Clear API contracts
@@ -58,6 +63,7 @@ app = FastAPI(
 ---
 
 ## 2. Customizing OpenAPI Schema
+
 **Duration: 15 minutes**
 
 ### 2.1 Application-Level Metadata
@@ -69,16 +75,16 @@ app = FastAPI(
     title="E-Commerce API",
     description="""
     ## Features
-    
+
     This API provides comprehensive e-commerce functionality:
-    
+
     * **Products** - Create, read, update, and delete products
     * **Orders** - Order management and tracking
     * **Users** - User authentication and profiles
     * **Payments** - Secure payment processing
-    
+
     ## Authentication
-    
+
     Most endpoints require JWT authentication.
     Use the `/auth/login` endpoint to obtain a token.
     """,
@@ -121,26 +127,26 @@ app = FastAPI()
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="Custom API",
         version="2.5.0",
         description="This is a very custom OpenAPI schema",
         routes=app.routes,
     )
-    
+
     # Add custom fields
     openapi_schema["info"]["x-logo"] = {
         "url": "https://example.com/logo.png"
     }
-    
+
     # Add servers
     openapi_schema["servers"] = [
         {"url": "https://api.example.com", "description": "Production"},
         {"url": "https://staging.example.com", "description": "Staging"},
         {"url": "http://localhost:8000", "description": "Development"},
     ]
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -187,6 +193,7 @@ async def hidden_endpoint():
 ---
 
 ## 3. Adding Descriptions and Examples
+
 **Duration: 15 minutes**
 
 ### 3.1 Pydantic Model Descriptions
@@ -202,7 +209,7 @@ class Product(BaseModel):
     """
     id: Optional[int] = Field(None, description="Unique product identifier")
     name: str = Field(
-        ..., 
+        ...,
         description="Product name",
         min_length=1,
         max_length=100,
@@ -230,7 +237,7 @@ class Product(BaseModel):
         description="Product category",
         example="Electronics"
     )
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -254,7 +261,7 @@ class User(BaseModel):
     username: str
     email: str
     full_name: Optional[str] = None
-    
+
     class Config:
         schema_extra = {
             "examples": [
@@ -404,19 +411,19 @@ async def get_item(item_id: int):
 async def create_user(user: User):
     """
     Create a new user with the following information:
-    
+
     - **username**: unique username (required)
     - **email**: valid email address (required)
     - **full_name**: user's full name (optional)
     - **disabled**: account status (optional, defaults to False)
-    
+
     The endpoint will:
     1. Validate the input data
     2. Check for duplicate usernames
     3. Hash the password
     4. Store the user in the database
     5. Return the created user object
-    
+
     **Note**: Passwords are never returned in responses.
     """
     return user
@@ -425,6 +432,7 @@ async def create_user(user: User):
 ---
 
 ## 4. Tagging and Organizing Endpoints
+
 **Duration: 10 minutes**
 
 ### 4.1 Basic Tagging
@@ -577,6 +585,7 @@ app.include_router(analytics.router)
 ---
 
 ## 5. API Versioning Strategies
+
 **Duration: 10 minutes**
 
 ### 5.1 Version in Path (Recommended)
@@ -674,12 +683,12 @@ app = FastAPI()
 @app.get("/users/")
 async def get_users(request: Request):
     host = request.headers.get("host", "")
-    
+
     if host.startswith("v1."):
         return {"version": "1.0", "users": []}
     elif host.startswith("v2."):
         return {"version": "2.0", "users": []}
-    
+
     # Default to latest version
     return {"version": "2.0", "users": []}
 ```
@@ -729,9 +738,9 @@ app = FastAPI()
     summary="[DEPRECATED] Old Endpoint",
     description="""
     ⚠️ **This endpoint is deprecated and will be removed on 2024-12-31**
-    
+
     Please migrate to `/v2/new-endpoint/`
-    
+
     Migration guide: https://docs.example.com/migration/v1-to-v2
     """
 )
@@ -751,6 +760,7 @@ async def new_endpoint():
 ---
 
 ## 6. RESTful Best Practices
+
 **Duration: 5 minutes**
 
 ### 6.1 HTTP Methods & Status Codes
@@ -844,15 +854,15 @@ async def get_products(
     min_price: Optional[float] = Query(None, ge=0, description="Minimum price"),
     max_price: Optional[float] = Query(None, ge=0, description="Maximum price"),
     in_stock: Optional[bool] = Query(None, description="Only show in-stock items"),
-    
+
     # Sorting
     sort_by: Optional[str] = Query("name", description="Sort field"),
     order: Optional[str] = Query("asc", regex="^(asc|desc)$", description="Sort order"),
-    
+
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    
+
     # Search
     search: Optional[str] = Query(None, min_length=2, description="Search query"),
 ):
@@ -904,7 +914,7 @@ class SuccessResponse(BaseModel, Generic[T]):
 async def get_items(page: int = 1, page_size: int = 20):
     items = []  # Fetch from database
     total = 0
-    
+
     return PaginatedResponse(
         data=items,
         total=total,
@@ -946,6 +956,7 @@ async def get_item(item_id: int):
 ---
 
 ## 7. Summary & Key Takeaways
+
 **Duration: 5 minutes**
 
 ### 🎯 Key Takeaways
@@ -1005,7 +1016,7 @@ class Task(BaseModel):
     description: Optional[str] = Field(None, description="Detailed description")
     completed: bool = Field(False, description="Completion status")
     priority: int = Field(1, ge=1, le=5, description="Priority (1-5)")
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -1046,12 +1057,12 @@ async def list_tasks(
 ):
     """
     Comprehensive task listing with filtering and pagination.
-    
+
     - **completed**: Filter by completion status
     - **priority**: Filter by priority level (1-5)
     - **page**: Page number for pagination
     - **page_size**: Number of items per page
-    
+
     Returns a list of tasks with metadata for pagination.
     """
     return []

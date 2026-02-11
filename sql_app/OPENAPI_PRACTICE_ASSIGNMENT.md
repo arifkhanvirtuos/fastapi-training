@@ -1,4 +1,5 @@
 # OpenAPI Customization - Practice Assignment
+
 ## Enhance API Documentation with Examples and Descriptions
 
 ---
@@ -6,6 +7,7 @@
 ## 🎯 Assignment Objectives
 
 By completing this assignment, you will:
+
 1. Apply OpenAPI customization to a real FastAPI application
 2. Add comprehensive descriptions and examples to all models
 3. Organize endpoints with tags and metadata
@@ -36,6 +38,7 @@ from fastapi import FastAPI
 ```
 
 **Requirements**:
+
 - [ ] Include a detailed description with at least 3 features listed
 - [ ] Add contact information with your name and email
 - [ ] Include license information
@@ -50,6 +53,7 @@ from fastapi import FastAPI
 Create three Pydantic models with complete documentation:
 
 #### Model 1: Book
+
 ```python
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -69,7 +73,7 @@ class Book(BaseModel):
     # - available: bool (default True)
     # - genre: str
     # - description: Optional[str]
-    
+
     class Config:
         schema_extra = {
             # TODO: Add complete example
@@ -77,6 +81,7 @@ class Book(BaseModel):
 ```
 
 #### Model 2: Member
+
 ```python
 class Member(BaseModel):
     """
@@ -89,6 +94,7 @@ class Member(BaseModel):
 ```
 
 #### Model 3: Loan
+
 ```python
 class Loan(BaseModel):
     """
@@ -101,6 +107,7 @@ class Loan(BaseModel):
 ```
 
 **Requirements**:
+
 - [ ] All fields have descriptions
 - [ ] All fields have realistic examples
 - [ ] Each model has a complete schema_extra example
@@ -129,6 +136,7 @@ app = FastAPI(
 ```
 
 **Requirements**:
+
 - [ ] Create 4 tags: books, members, loans, admin
 - [ ] Each tag has a detailed description
 - [ ] At least 2 tags have external documentation links
@@ -193,6 +201,7 @@ async def delete_book(book_id: int):
 ```
 
 **Requirements**:
+
 - [ ] All endpoints have proper HTTP methods
 - [ ] Correct status codes used
 - [ ] Query parameters have descriptions and validators
@@ -233,6 +242,7 @@ async def get_book(book_id: int):
 ```
 
 **Requirements**:
+
 - [ ] Define responses for 200, 404, 422 status codes
 - [ ] Include realistic examples for each response
 - [ ] Add descriptions for each response type
@@ -258,7 +268,7 @@ v2_router = APIRouter(prefix="/v2", tags=["v2"])
 async def list_books_v2():
     """
     V2: Returns paginated response with metadata
-    
+
     Enhancements over V1:
     - TODO: List improvements
     """
@@ -269,13 +279,14 @@ async def list_books_v2():
 async def old_list_books():
     """
     ⚠️ DEPRECATED: This endpoint will be removed in v3.0.0
-    
+
     Please use /v2/books/ instead
     """
     pass
 ```
 
 **Requirements**:
+
 - [ ] Implement both v1 and v2 versions
 - [ ] V2 includes enhanced features (pagination, better filtering)
 - [ ] Add at least one deprecated endpoint
@@ -294,20 +305,20 @@ from fastapi.openapi.utils import get_openapi
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="Library Management System",
         version="1.0.0",
         description="Custom OpenAPI schema",
         routes=app.routes,
     )
-    
+
     # TODO: Add custom fields
     # - Add logo URL
     # - Add multiple servers (dev, staging, prod)
     # - Add security schemes
     # - Add custom vendor extensions (x-*)
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -315,9 +326,10 @@ app.openapi = custom_openapi
 ```
 
 **Requirements**:
+
 - [ ] Add logo URL
 - [ ] Define 3 servers (development, staging, production)
-- [ ] Add at least one custom extension field (x-*)
+- [ ] Add at least one custom extension field (x-\*)
 - [ ] Document the customizations in comments
 
 ---
@@ -327,12 +339,14 @@ app.openapi = custom_openapi
 ### Manual Testing Checklist
 
 1. **Documentation UI**
+
    ```bash
    # Start your app
    uvicorn assignment_app:app --reload
-   
+
    # Visit http://localhost:8000/docs
    ```
+
    - [ ] Application title and description appear
    - [ ] All tags are visible and organized
    - [ ] Endpoints are grouped correctly
@@ -362,7 +376,7 @@ def test_openapi_schema():
     """Verify OpenAPI schema is customized"""
     response = client.get("/openapi.json")
     schema = response.json()
-    
+
     assert schema["info"]["title"] == "Library Management System API"
     assert "contact" in schema["info"]
     assert "license" in schema["info"]
@@ -393,18 +407,19 @@ def test_create_book():
 
 ## 📊 Grading Rubric
 
-| Task | Points | Criteria |
-|------|--------|----------|
-| Task 1: App Metadata | 15 | Complete metadata with all fields |
-| Task 2: Models | 25 | 3 models with descriptions, examples, validators |
-| Task 3: Tags | 15 | 4+ tags with descriptions and external docs |
-| Task 4: REST Endpoints | 30 | All CRUD operations with proper HTTP methods |
-| Task 5: Response Docs | 15 | Multiple response types documented |
-| Task 6: Versioning | 20 | V1/V2 implementation with deprecation |
-| Task 7: Custom Schema | 15 | Bonus points for advanced customization |
-| **Total** | **135** | **100 + 35 bonus** |
+| Task                   | Points  | Criteria                                         |
+| ---------------------- | ------- | ------------------------------------------------ |
+| Task 1: App Metadata   | 15      | Complete metadata with all fields                |
+| Task 2: Models         | 25      | 3 models with descriptions, examples, validators |
+| Task 3: Tags           | 15      | 4+ tags with descriptions and external docs      |
+| Task 4: REST Endpoints | 30      | All CRUD operations with proper HTTP methods     |
+| Task 5: Response Docs  | 15      | Multiple response types documented               |
+| Task 6: Versioning     | 20      | V1/V2 implementation with deprecation            |
+| Task 7: Custom Schema  | 15      | Bonus points for advanced customization          |
+| **Total**              | **135** | **100 + 35 bonus**                               |
 
 ### Grading Scale
+
 - **90-100+**: Excellent - Professional-grade documentation
 - **80-89**: Good - Well-documented with minor gaps
 - **70-79**: Satisfactory - Basic documentation complete
@@ -439,7 +454,9 @@ def test_create_book():
 ## 🎁 Bonus Challenges
 
 ### Challenge 1: Search Implementation
+
 Implement full-text search across book title, author, and description:
+
 ```python
 @app.get("/v2/books/search/")
 async def search_books(
@@ -451,7 +468,9 @@ async def search_books(
 ```
 
 ### Challenge 2: Rate Limiting Documentation
+
 Document rate limiting in OpenAPI:
+
 ```python
 # Add to custom OpenAPI schema
 openapi_schema["x-rate-limit"] = {
@@ -462,7 +481,9 @@ openapi_schema["x-rate-limit"] = {
 ```
 
 ### Challenge 3: Webhook Documentation
+
 Document webhooks for loan events:
+
 ```python
 # Add webhook documentation to OpenAPI schema
 ```
@@ -472,11 +493,13 @@ Document webhooks for loan events:
 ## 📤 Submission
 
 Submit the following files:
+
 1. `assignment_app.py` - Your complete FastAPI application
 2. `test_assignment.py` - Test file (if you wrote tests)
 3. `REFLECTION.md` - Brief reflection on what you learned
 
 ### Reflection Questions
+
 1. What was the most challenging part of the assignment?
 2. How does good documentation improve API usability?
 3. Which versioning strategy would you use in production?
@@ -496,6 +519,7 @@ Submit the following files:
 ## ✅ Completion Checklist
 
 Before submitting, verify:
+
 - [ ] All 6 main tasks completed
 - [ ] Swagger UI loads without errors
 - [ ] All endpoints have descriptions

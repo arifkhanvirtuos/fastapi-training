@@ -1,4 +1,5 @@
 # OpenAPI Customization & API Documentation Course
+
 ## Complete Learning Module
 
 ---
@@ -12,6 +13,7 @@
 ### What You'll Learn
 
 By completing this module, you will:
+
 - ✅ Master OpenAPI schema customization
 - ✅ Write comprehensive API documentation
 - ✅ Organize APIs with tags and metadata
@@ -24,9 +26,11 @@ By completing this module, you will:
 ## 📖 Course Materials
 
 ### 1. Main Lecture (60 minutes)
+
 **File**: [OPENAPI_CUSTOMIZATION_LECTURE.md](./OPENAPI_CUSTOMIZATION_LECTURE.md)
 
 Comprehensive 1-hour lecture covering:
+
 1. Introduction to OpenAPI (5 min)
 2. Customizing OpenAPI Schema (15 min)
 3. Adding Descriptions and Examples (15 min)
@@ -40,9 +44,11 @@ Comprehensive 1-hour lecture covering:
 ---
 
 ### 2. Quick Reference Guide
+
 **File**: [OPENAPI_QUICK_REFERENCE.md](./OPENAPI_QUICK_REFERENCE.md)
 
 Quick access to:
+
 - Common patterns and code snippets
 - RESTful best practices cheatsheet
 - Status codes reference
@@ -54,9 +60,11 @@ Quick access to:
 ---
 
 ### 3. Working Example
+
 **File**: [openapi_example.py](./openapi_example.py)
 
 Complete, runnable FastAPI application demonstrating all concepts:
+
 - Application metadata
 - Comprehensive model documentation
 - Endpoint organization with tags
@@ -79,9 +87,11 @@ open http://localhost:8000/openapi.json # OpenAPI Schema
 ---
 
 ### 4. Practice Assignment
+
 **File**: [OPENAPI_PRACTICE_ASSIGNMENT.md](./OPENAPI_PRACTICE_ASSIGNMENT.md)
 
 Hands-on assignment to build a Library Management System API with:
+
 - **Task 1**: Application-level customization (15 points)
 - **Task 2**: Comprehensive models (25 points)
 - **Task 3**: Tag organization (15 points)
@@ -99,11 +109,13 @@ Hands-on assignment to build a Library Management System API with:
 ## 🎯 Learning Path
 
 ### Step 1: Study (60 minutes)
+
 1. Read [OPENAPI_CUSTOMIZATION_LECTURE.md](./OPENAPI_CUSTOMIZATION_LECTURE.md) from start to finish
 2. Take notes on key concepts
 3. Review the examples in each section
 
 ### Step 2: Explore (30 minutes)
+
 1. Run [openapi_example.py](./openapi_example.py)
 2. Open http://localhost:8000/docs
 3. Try the "Try it out" feature for each endpoint
@@ -111,17 +123,20 @@ Hands-on assignment to build a Library Management System API with:
 5. Compare Swagger UI vs ReDoc (/redoc)
 
 ### Step 3: Reference (As needed)
+
 1. Keep [OPENAPI_QUICK_REFERENCE.md](./OPENAPI_QUICK_REFERENCE.md) open
 2. Use it to look up syntax and patterns
 3. Reference the cheatsheets
 
 ### Step 4: Practice (2-3 hours)
+
 1. Open [OPENAPI_PRACTICE_ASSIGNMENT.md](./OPENAPI_PRACTICE_ASSIGNMENT.md)
 2. Complete tasks 1-6 (required)
 3. Attempt task 7 (bonus)
 4. Test your implementation thoroughly
 
 ### Step 5: Review (30 minutes)
+
 1. Compare your solution with [openapi_example.py](./openapi_example.py)
 2. Identify areas for improvement
 3. Refine your code
@@ -132,12 +147,14 @@ Hands-on assignment to build a Library Management System API with:
 ## 🛠️ Setup Instructions
 
 ### Prerequisites
+
 ```bash
 # Ensure you have FastAPI and Uvicorn installed
 pip install fastapi uvicorn[standard] pydantic[email]
 ```
 
 ### Running the Example
+
 ```bash
 # Navigate to the sql_app directory
 cd sql_app
@@ -152,6 +169,7 @@ uvicorn openapi_example:app --reload
 ```
 
 ### Working on the Assignment
+
 ```bash
 # Create your assignment file
 touch assignment_app.py
@@ -167,12 +185,14 @@ uvicorn assignment_app:app --reload
 After completing this module, you should be able to:
 
 ### Knowledge Assessment
+
 - [ ] Explain what OpenAPI is and why it matters
 - [ ] Describe different API versioning strategies
 - [ ] List RESTful naming conventions
 - [ ] Explain appropriate HTTP methods and status codes
 
 ### Practical Skills
+
 - [ ] Create FastAPI apps with complete metadata
 - [ ] Add descriptions and examples to Pydantic models
 - [ ] Organize endpoints with tags and metadata
@@ -182,6 +202,7 @@ After completing this module, you should be able to:
 - [ ] Follow RESTful best practices
 
 ### Application
+
 - [ ] Build production-ready API documentation
 - [ ] Design versioned APIs that are easy to maintain
 - [ ] Create self-documenting endpoints
@@ -192,13 +213,16 @@ After completing this module, you should be able to:
 ## 🎓 Key Takeaways
 
 ### 1. Documentation is Code
+
 Good API documentation is:
+
 - Written alongside the code
 - Version-controlled
 - Tested and validated
 - Updated with every change
 
 ### 2. OpenAPI Benefits
+
 - **Self-documenting**: Code generates docs automatically
 - **Interactive**: Try endpoints without writing client code
 - **Standardized**: Works with tools like Postman, Insomnia
@@ -207,6 +231,7 @@ Good API documentation is:
 ### 3. Best Practices
 
 #### DO ✅
+
 - Add descriptions to all models and endpoints
 - Provide realistic examples
 - Use appropriate HTTP methods and status codes
@@ -216,6 +241,7 @@ Good API documentation is:
 - Keep documentation updated
 
 #### DON'T ❌
+
 - Leave models without examples
 - Use verbs in endpoint names
 - Forget to document error cases
@@ -228,6 +254,7 @@ Good API documentation is:
 ## 📈 Going Further
 
 ### Advanced Topics
+
 After mastering the basics, explore:
 
 1. **Authentication Documentation**
@@ -241,7 +268,7 @@ After mastering the basics, explore:
    - Multiple response content types
 
 3. **OpenAPI Extensions**
-   - Custom vendor extensions (x-*)
+   - Custom vendor extensions (x-\*)
    - Code generation from OpenAPI
    - API testing from OpenAPI schema
 
@@ -251,12 +278,14 @@ After mastering the basics, explore:
    - Documentation versioning
 
 ### Recommended Reading
+
 - [OpenAPI Specification v3.1](https://spec.openapis.org/oas/v3.1.0)
 - [FastAPI Advanced Documentation](https://fastapi.tiangolo.com/advanced/)
 - [RESTful API Design Guide](https://restfulapi.net/)
 - [API Design Patterns](https://www.manning.com/books/api-design-patterns)
 
 ### Tools to Explore
+
 - **Swagger Editor**: Edit and validate OpenAPI specs
 - **Postman**: Import OpenAPI for API testing
 - **Insomnia**: Alternative API client
@@ -268,12 +297,14 @@ After mastering the basics, explore:
 ## 💡 Tips for Success
 
 ### Study Tips
+
 1. **Understand the Why**: Don't just copy examples, understand why they work
 2. **Practice Regularly**: Build small APIs to practice concepts
 3. **Read Others' Code**: Study popular open-source API projects
 4. **Use the Tools**: Get comfortable with Swagger UI and ReDoc
 
 ### Development Tips
+
 1. **Start Simple**: Begin with basic docs, enhance incrementally
 2. **Test Often**: Check documentation after every change
 3. **Think Like Users**: What would you want to know about this API?
@@ -281,6 +312,7 @@ After mastering the basics, explore:
 5. **Automate**: Use CI/CD to validate OpenAPI schema
 
 ### Common Pitfalls to Avoid
+
 - ❌ Forgetting to update docs when code changes
 - ❌ Using generic examples like "string" or "test"
 - ❌ Inconsistent naming across endpoints
@@ -320,18 +352,21 @@ You've mastered this module when you can:
 ## 📝 Checklist
 
 ### Before Starting
+
 - [ ] Read the entire lecture document
 - [ ] Run the working example
 - [ ] Explore the Swagger UI
 - [ ] Review the quick reference guide
 
 ### During Practice
+
 - [ ] Complete all required assignment tasks
 - [ ] Test each endpoint in Swagger UI
 - [ ] Validate the OpenAPI schema
 - [ ] Compare with the example implementation
 
 ### After Completion
+
 - [ ] All endpoints documented
 - [ ] All models have examples
 - [ ] Versioning implemented
@@ -343,26 +378,30 @@ You've mastered this module when you can:
 
 ## 🔗 Quick Links
 
-| Resource | Purpose | Link |
-|----------|---------|------|
-| Main Lecture | Complete 1-hour course | [OPENAPI_CUSTOMIZATION_LECTURE.md](./OPENAPI_CUSTOMIZATION_LECTURE.md) |
-| Quick Reference | Syntax and patterns | [OPENAPI_QUICK_REFERENCE.md](./OPENAPI_QUICK_REFERENCE.md) |
-| Working Example | Complete implementation | [openapi_example.py](./openapi_example.py) |
-| Practice Assignment | Hands-on exercises | [OPENAPI_PRACTICE_ASSIGNMENT.md](./OPENAPI_PRACTICE_ASSIGNMENT.md) |
+| Resource            | Purpose                 | Link                                                                   |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| Main Lecture        | Complete 1-hour course  | [OPENAPI_CUSTOMIZATION_LECTURE.md](./OPENAPI_CUSTOMIZATION_LECTURE.md) |
+| Quick Reference     | Syntax and patterns     | [OPENAPI_QUICK_REFERENCE.md](./OPENAPI_QUICK_REFERENCE.md)             |
+| Working Example     | Complete implementation | [openapi_example.py](./openapi_example.py)                             |
+| Practice Assignment | Hands-on exercises      | [OPENAPI_PRACTICE_ASSIGNMENT.md](./OPENAPI_PRACTICE_ASSIGNMENT.md)     |
 
 ---
 
 ## 📞 Support
 
 ### Questions?
+
 If you have questions while learning:
+
 1. Review the lecture material
 2. Check the quick reference guide
 3. Examine the working example
 4. Review the FastAPI documentation
 
 ### Found an Issue?
+
 If you find errors or have suggestions:
+
 - Documentation issues: Check for typos or unclear explanations
 - Code issues: Verify you're using the correct Python/FastAPI version
 - Assignment questions: Review the grading rubric
@@ -372,6 +411,7 @@ If you find errors or have suggestions:
 ## 🎊 Completion Certificate
 
 Once you've completed all tasks:
+
 1. ✅ Studied the lecture materials
 2. ✅ Ran and explored the working example
 3. ✅ Completed the practice assignment
@@ -381,6 +421,7 @@ Once you've completed all tasks:
 **Congratulations!** 🎉 You've mastered OpenAPI customization and API documentation with FastAPI!
 
 ### Next Steps
+
 - Apply these concepts to your projects
 - Explore advanced topics
 - Share your knowledge with others

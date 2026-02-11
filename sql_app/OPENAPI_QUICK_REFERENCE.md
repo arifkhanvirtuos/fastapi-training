@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 class Item(BaseModel):
     name: str = Field(..., description="Item name", example="Widget")
     price: float = Field(..., gt=0, description="Price in USD", example=29.99)
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -217,23 +217,23 @@ from fastapi.openapi.utils import get_openapi
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="Custom API",
         version="1.0.0",
         description="Custom schema",
         routes=app.routes,
     )
-    
+
     openapi_schema["info"]["x-logo"] = {
         "url": "https://example.com/logo.png"
     }
-    
+
     openapi_schema["servers"] = [
         {"url": "https://api.example.com", "description": "Production"},
         {"url": "http://localhost:8000", "description": "Development"},
     ]
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -246,13 +246,13 @@ app.openapi = custom_openapi
 
 ### HTTP Methods & Status Codes
 
-| Method | Use Case | Success Code | Error Codes |
-|--------|----------|--------------|-------------|
-| GET | Retrieve resource(s) | 200 | 404, 400 |
-| POST | Create new resource | 201 | 400, 422 |
-| PUT | Replace entire resource | 200, 204 | 404, 400 |
-| PATCH | Partial update | 200 | 404, 400 |
-| DELETE | Remove resource | 204, 200 | 404 |
+| Method | Use Case                | Success Code | Error Codes |
+| ------ | ----------------------- | ------------ | ----------- |
+| GET    | Retrieve resource(s)    | 200          | 404, 400    |
+| POST   | Create new resource     | 201          | 400, 422    |
+| PUT    | Replace entire resource | 200, 204     | 404, 400    |
+| PATCH  | Partial update          | 200          | 404, 400    |
+| DELETE | Remove resource         | 204, 200     | 404         |
 
 ### Naming Conventions
 
@@ -313,7 +313,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 async def list_items(page: int = 1, page_size: int = 20):
     total = 100  # From database
     items = []   # Fetch from database
-    
+
     return PaginatedResponse(
         items=items,
         total=total,
@@ -360,12 +360,14 @@ async def get_item(item_id: int):
 ## 📊 Status Codes Reference
 
 ### Success Codes
+
 - **200 OK**: Standard success response
 - **201 Created**: Resource created successfully
 - **204 No Content**: Success with no response body
 - **206 Partial Content**: Partial data returned
 
 ### Client Error Codes
+
 - **400 Bad Request**: Invalid request syntax
 - **401 Unauthorized**: Authentication required
 - **403 Forbidden**: Authenticated but not authorized
@@ -374,6 +376,7 @@ async def get_item(item_id: int):
 - **422 Unprocessable Entity**: Validation error
 
 ### Server Error Codes
+
 - **500 Internal Server Error**: Server error
 - **503 Service Unavailable**: Service down
 
@@ -382,6 +385,7 @@ async def get_item(item_id: int):
 ## 🎨 Documentation Best Practices
 
 ### 1. Always Include
+
 - [ ] Application title, description, version
 - [ ] Contact information
 - [ ] License information
@@ -390,6 +394,7 @@ async def get_item(item_id: int):
 - [ ] Descriptions for all fields
 
 ### 2. Model Documentation
+
 - [ ] Class docstring
 - [ ] Field descriptions
 - [ ] Field examples
@@ -397,6 +402,7 @@ async def get_item(item_id: int):
 - [ ] Complete schema_extra example
 
 ### 3. Endpoint Documentation
+
 - [ ] Summary (short title)
 - [ ] Description (detailed explanation)
 - [ ] Response description
@@ -406,6 +412,7 @@ async def get_item(item_id: int):
 - [ ] Deprecation warnings if needed
 
 ### 4. Response Documentation
+
 - [ ] Define response_model
 - [ ] Document error responses
 - [ ] Include example responses
@@ -439,7 +446,7 @@ class Item(BaseModel):
     id: Optional[int] = Field(None, description="Item ID")
     name: str = Field(..., description="Item name", example="Widget")
     price: float = Field(..., gt=0, description="Price", example=9.99)
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -505,16 +512,19 @@ curl http://localhost:8000/openapi.json | jq
 ## 📱 Tools & Resources
 
 ### Documentation Tools
+
 - **Swagger UI**: Built into FastAPI at `/docs`
 - **ReDoc**: Built into FastAPI at `/redoc`
 - **Postman**: Import OpenAPI schema for testing
 - **Insomnia**: Import OpenAPI schema
 
 ### Validation Tools
+
 - [Swagger Editor](https://editor.swagger.io/): Validate OpenAPI schema
 - [OpenAPI Validator](https://validator.swagger.io/): Online validator
 
 ### Learning Resources
+
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [OpenAPI Specification](https://swagger.io/specification/)
 - [REST API Tutorial](https://restfulapi.net/)

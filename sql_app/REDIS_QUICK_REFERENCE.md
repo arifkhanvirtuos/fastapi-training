@@ -18,6 +18,7 @@ python -m uvicorn main:app --reload
 ```
 
 **Check startup logs:**
+
 ```
 ✅ Migrations completed successfully!
 ✅ Connected to Redis
@@ -28,21 +29,25 @@ python -m uvicorn main:app --reload
 ## 📚 Key Concepts (30 seconds each)
 
 ### Cache-Aside Pattern
+
 - Check cache first
 - On miss: fetch from DB, then store in cache
 - Simple, flexible, handles stale data
 
 ### Write-Through Pattern
+
 - Update DB and cache simultaneously
 - Cache always current
 - Higher write latency
 
 ### TTL (Time-To-Live)
+
 - Auto-expiration for cache keys
 - Eventual consistency approach
 - Balances freshness vs performance
 
 ### Cache Invalidation
+
 - Explicit: Delete when data changes
 - TTL-based: Automatic expiration
 - Pattern-based: Delete multiple keys
@@ -199,6 +204,7 @@ Session data          N/A                     24 hours
 ## 🐛 Troubleshooting Quick Fixes
 
 ### Redis Won't Connect
+
 ```bash
 # Check if Redis is running
 brew services list | grep redis
@@ -211,6 +217,7 @@ redis-cli ping
 ```
 
 ### Cache Not Working
+
 ```bash
 # Verify you're using cached endpoints
 curl http://localhost:8000/users-cached  # ✅ Uses cache
@@ -222,6 +229,7 @@ redis-cli get "user:1"
 ```
 
 ### Memory Usage High
+
 ```bash
 # Clear all cache
 curl -X POST "http://localhost:8000/admin/cache/clear?pattern=*"
@@ -234,6 +242,7 @@ curl http://localhost:8000/admin/cache/stats | jq '.memory_usage_mb'
 ```
 
 ### Hit Ratio Low
+
 ```bash
 # Is data changing too fast (TTL too short)?
 # → Increase TTL value
@@ -256,6 +265,7 @@ POST /admin/cache/warm
 ### Add cache to any endpoint (5 min)
 
 **Before:**
+
 ```python
 @app.get("/data")
 async def get_data(db: Session = Depends(get_db)):
@@ -263,6 +273,7 @@ async def get_data(db: Session = Depends(get_db)):
 ```
 
 **After:**
+
 ```python
 @app.get("/data-cached")
 async def get_data_cached(
@@ -276,20 +287,21 @@ async def get_data_cached(
             await CacheMetrics(redis).record_hit("data:list")
             return json.loads(cached)
         await CacheMetrics(redis).record_miss("data:list")
-    
+
     # Fetch data
     data = db.query(Data).all()
-    
+
     # Cache it
     if redis:
         await redis.set("data:list", [d.to_dict() for d in data], ex=3600)
-    
+
     return data
 ```
 
 ### Add invalidation (next 5 min)
 
 **When updating:**
+
 ```python
 # After update
 if redis:
@@ -302,17 +314,20 @@ if redis:
 ## 🎓 Learning Timeline
 
 ### Today (30 min)
+
 - [ ] Read: Fundamentals section
 - [ ] Read: Caching Patterns
 - [ ] Test: Run `curl http://localhost:8000/users-cached`
 
 ### This Week (2 hours)
+
 - [ ] Read: Cache Invalidation
 - [ ] Read: FastAPI Integration
 - [ ] Implement: One cached endpoint yourself
 - [ ] Monitor: Check cache stats
 
 ### This Month (5 hours)
+
 - [ ] Complete: Full Practice Assignment
 - [ ] Optimize: Adjust TTL values
 - [ ] Implement: Caching for all endpoints
@@ -335,6 +350,7 @@ if redis:
 ## 📞 When to Use Redis Caching
 
 ### ✅ Perfect For
+
 - Read-heavy applications
 - Expensive database queries
 - User session data
@@ -343,6 +359,7 @@ if redis:
 - Real-time counters
 
 ### ❌ Don't Use For
+
 - Sensitive data (without encryption)
 - Large binary files
 - Data requiring transactions
@@ -353,25 +370,27 @@ if redis:
 
 ## 🔗 Key Files Reference
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `redis_client.py` | 250+ | Redis client wrapper |
-| `cache_utils.py` | 200+ | Utilities & metrics |
-| `session_manager.py` | 200+ | Session storage |
-| `main.py` | +450 | Endpoints integrated |
-| `REDIS_CACHING_LECTURE.md` | 1000+ | Full lecture |
-| `REDIS_PRACTICE_ASSIGNMENT.md` | 500+ | Hands-on practice |
+| File                           | Lines | Purpose              |
+| ------------------------------ | ----- | -------------------- |
+| `redis_client.py`              | 250+  | Redis client wrapper |
+| `cache_utils.py`               | 200+  | Utilities & metrics  |
+| `session_manager.py`           | 200+  | Session storage      |
+| `main.py`                      | +450  | Endpoints integrated |
+| `REDIS_CACHING_LECTURE.md`     | 1000+ | Full lecture         |
+| `REDIS_PRACTICE_ASSIGNMENT.md` | 500+  | Hands-on practice    |
 
 ---
 
 ## ⚡ Pro Tips
 
 1. **Use cache warming** for popular data
+
    ```bash
    curl -X POST http://localhost:8000/admin/cache/warm
    ```
 
 2. **Monitor hit ratio** - Aim for >80%
+
    ```bash
    curl http://localhost:8000/admin/cache/stats
    ```
@@ -404,6 +423,7 @@ if redis:
 **Week 4:** 85%+ (production-ready)
 
 **Track with:**
+
 ```bash
 watch -n 5 'curl -s http://localhost:8000/admin/cache/stats | jq .hit_ratio_percent'
 ```

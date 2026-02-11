@@ -1,10 +1,13 @@
 # Redis Caching & FastAPI Integration - Complete Lecture
+
 ## Duration: 1 Hour
+
 ## Topics: Redis Basics, Caching Patterns, Cache Invalidation, FastAPI Integration, Session Storage
 
 ---
 
 ## 📋 Table of Contents
+
 1. [Redis Fundamentals (10 min)](#1-redis-fundamentals)
 2. [Caching Patterns (15 min)](#2-caching-patterns)
 3. [Cache Invalidation Strategies (10 min)](#3-cache-invalidation-strategies)
@@ -15,11 +18,13 @@
 ---
 
 ## 1. Redis Fundamentals
+
 **Duration: 10 minutes**
 
 ### What is Redis?
 
 Redis (Remote Dictionary Server) is an **in-memory data structure store** that provides:
+
 - **Lightning-fast performance** (microsecond latency)
 - **Data persistence** options (RDB snapshots, AOF logs)
 - **Multiple data types** (strings, lists, sets, hashes, sorted sets)
@@ -40,19 +45,19 @@ Redis Lookup: 0.1-1ms ✅
 1. Strings (Basic caching)
    - Perfect for: Simple values, JSON, serialized objects
    - Example: Cache user profile data
-   
+
 2. Hashes (Object caching)
    - Perfect for: Multiple fields of one entity
    - Example: User ID → {name, email, role}
-   
+
 3. Lists (Queue/Timeline)
    - Perfect for: Message queues, activity feeds
    - Example: Recent user activity
-   
+
 4. Sets (Fast lookups)
    - Perfect for: Membership testing, unique items
    - Example: Active sessions, tags
-   
+
 5. Sorted Sets (Ranked data)
    - Perfect for: Leaderboards, time-series data
    - Example: Top users by score
@@ -61,6 +66,7 @@ Redis Lookup: 0.1-1ms ✅
 ### Redis Setup Overview
 
 **Installation (macOS)**
+
 ```bash
 brew install redis
 redis-server  # Start Redis
@@ -68,12 +74,14 @@ redis-cli     # CLI access
 ```
 
 **Installation (Linux)**
+
 ```bash
 sudo apt-get install redis-server
 sudo systemctl start redis-server
 ```
 
 **Verification**
+
 ```bash
 redis-cli ping
 # Output: PONG
@@ -108,11 +116,13 @@ FLUSHDB                       # Clear all keys (careful!)
 ---
 
 ## 2. Caching Patterns
+
 **Duration: 15 minutes**
 
 ### Pattern 1: Cache-Aside (Lazy Loading)
 
 **How it works:**
+
 1. Application checks Redis first
 2. If miss → fetch from database
 3. Store result in Redis with TTL
@@ -125,33 +135,35 @@ async def get_user_cached(user_id: str, db: Session, redis_client):
     # Step 1: Try cache
     cache_key = f"user:{user_id}"
     cached_user = await redis_client.get(cache_key)
-    
+
     if cached_user:
         return json.loads(cached_user)  # Cache hit!
-    
+
     # Step 2: Cache miss - fetch from database
     user = db.query(User).filter(User.id == user_id).first()
-    
+
     if not user:
         return None
-    
+
     # Step 3: Store in cache for 1 hour
     await redis_client.setex(
         cache_key,
         3600,
         json.dumps(user.to_dict())
     )
-    
+
     return user
 ```
 
 **Advantages:**
+
 - ✅ Simple to implement
 - ✅ Only caches accessed data
 - ✅ No stale data issues initially
 - ✅ Handles missing data gracefully
 
 **Disadvantages:**
+
 - ❌ Cache miss penalty on first request
 - ❌ Stale data possible if not invalidated
 - ❌ Cache stampede (thundering herd) problem
@@ -159,6 +171,7 @@ async def get_user_cached(user_id: str, db: Session, redis_client):
 ### Pattern 2: Write-Through
 
 **How it works:**
+
 1. Update database
 2. Update cache simultaneously
 3. Return success to client
@@ -169,13 +182,13 @@ async def get_user_cached(user_id: str, db: Session, redis_client):
 async def update_user_write_through(user_id: str, updates: dict, db: Session, redis_client):
     # Step 1: Update database
     user = db.query(User).filter(User.id == user_id).first()
-    
+
     for field, value in updates.items():
         setattr(user, field, value)
-    
+
     db.commit()
     db.refresh(user)
-    
+
     # Step 2: Update cache
     cache_key = f"user:{user_id}"
     await redis_client.setex(
@@ -183,16 +196,18 @@ async def update_user_write_through(user_id: str, updates: dict, db: Session, re
         3600,
         json.dumps(user.to_dict())
     )
-    
+
     return user
 ```
 
 **Advantages:**
+
 - ✅ Cache always up-to-date
 - ✅ No stale data
 - ✅ Perfect for critical operations
 
 **Disadvantages:**
+
 - ❌ Write latency increases
 - ❌ Extra cache operations
 - ❌ Unused cache entries waste memory
@@ -200,6 +215,7 @@ async def update_user_write_through(user_id: str, updates: dict, db: Session, re
 ### Pattern 3: Write-Behind (Write-Back)
 
 **How it works:**
+
 1. Write to cache immediately
 2. Asynchronously write to database
 3. Return to client immediately
@@ -220,9 +236,9 @@ async def update_user_write_behind(
     cache_key = f"user:{user_id}"
     current_data = json.loads(await redis_client.get(cache_key)) or {}
     current_data.update(updates)
-    
+
     await redis_client.setex(cache_key, 3600, json.dumps(current_data))
-    
+
     # Step 2: Schedule database update
     background_tasks.add_task(
         persist_to_database,
@@ -230,25 +246,27 @@ async def update_user_write_behind(
         current_data,
         db
     )
-    
+
     return {"message": "Update queued"}
 
 async def persist_to_database(user_id: str, data: dict, db: Session):
     """Run in background after response sent"""
     user = db.query(User).filter(User.id == user_id).first()
-    
+
     for field, value in data.items():
         setattr(user, field, value)
-    
+
     db.commit()
 ```
 
 **Advantages:**
+
 - ✅ Fastest response times
 - ✅ Decouples database from API
 - ✅ Good for write-heavy workloads
 
 **Disadvantages:**
+
 - ❌ Risk of data loss on crash
 - ❌ Complexity in consistency
 - ❌ Requires careful error handling
@@ -256,6 +274,7 @@ async def persist_to_database(user_id: str, data: dict, db: Session):
 ### Pattern 4: Refresh-Ahead
 
 **How it works:**
+
 1. Monitor cache expiration
 2. Refresh before expiry
 3. Extend TTL automatically
@@ -270,44 +289,47 @@ async def get_user_with_refresh_ahead(
     refresh_threshold: int = 300  # Refresh 5 min before expiry
 ):
     cache_key = f"user:{user_id}"
-    
+
     # Check if exists and get TTL
     ttl = await redis_client.ttl(cache_key)
-    
+
     if ttl == -1:  # No expiration
         return await redis_client.get(cache_key)
-    
+
     if ttl < refresh_threshold:  # Close to expiry
         # Fetch fresh data
         user = db.query(User).filter(User.id == user_id).first()
         await redis_client.setex(cache_key, 3600, json.dumps(user.to_dict()))
         return user
-    
+
     return await redis_client.get(cache_key)
 ```
 
 **Advantages:**
+
 - ✅ No stale data
 - ✅ Continuous availability
 - ✅ No cache misses for popular items
 
 **Disadvantages:**
+
 - ❌ Extra database load
 - ❌ More complex logic
 - ❌ Wasted refreshes on rarely used data
 
 ### Caching Pattern Comparison
 
-| Pattern | Consistency | Response Time | DB Load | Complexity |
-|---------|-------------|---------------|---------|-----------|
-| **Cache-Aside** | Eventual | Moderate | High on miss | Low |
-| **Write-Through** | Strong | Moderate | Moderate | Low |
-| **Write-Behind** | Eventual | Very Fast | Low | High |
-| **Refresh-Ahead** | Strong | Very Fast | Moderate | High |
+| Pattern           | Consistency | Response Time | DB Load      | Complexity |
+| ----------------- | ----------- | ------------- | ------------ | ---------- |
+| **Cache-Aside**   | Eventual    | Moderate      | High on miss | Low        |
+| **Write-Through** | Strong      | Moderate      | Moderate     | Low        |
+| **Write-Behind**  | Eventual    | Very Fast     | Low          | High       |
+| **Refresh-Ahead** | Strong      | Very Fast     | Moderate     | High       |
 
 ---
 
 ## 3. Cache Invalidation Strategies
+
 **Duration: 10 minutes**
 
 ### The Hard Problem
@@ -330,11 +352,13 @@ await redis_client.set("user:1", user_data)
 ```
 
 **Best for:**
+
 - Non-critical data
 - Data that changes infrequently
 - Simple implementations
 
 **TTL Guidelines:**
+
 ```
 Frequently changing data: 5-15 minutes
 User profiles: 1 hour
@@ -353,25 +377,27 @@ Session data: 24 hours
 async def update_user(user_id: str, updates: dict, db: Session, redis_client):
     # Update database
     user = db.query(User).filter(User.id == user_id).first()
-    
+
     for field, value in updates.items():
         setattr(user, field, value)
-    
+
     db.commit()
-    
+
     # Invalidate cache
     await redis_client.delete(f"user:{user_id}")
     await redis_client.delete("users:all")  # Invalidate list too
-    
+
     return user
 ```
 
 **Best for:**
+
 - Critical data that must be fresh
 - Small cache sets
 - Rare updates
 
 **Granular Invalidation:**
+
 ```python
 async def delete_user_cache(user_id: str, redis_client):
     """Delete all cache keys related to a user"""
@@ -382,7 +408,7 @@ async def delete_user_cache(user_id: str, redis_client):
         "users:all",
         "leaderboard:*"
     ]
-    
+
     for pattern in patterns:
         keys = await redis_client.keys(pattern)
         for key in keys:
@@ -400,7 +426,7 @@ async def delete_user_cache(user_id: str, redis_client):
 class TaggedCache:
     def __init__(self, redis_client):
         self.redis = redis_client
-    
+
     async def set_with_tags(
         self,
         key: str,
@@ -410,21 +436,21 @@ class TaggedCache:
     ):
         # Store the actual value
         await self.redis.setex(key, ttl, value)
-        
+
         # Add key to each tag
         for tag in tags:
             tag_key = f"tag:{tag}"
             await self.redis.sadd(tag_key, key)
             await self.redis.expire(tag_key, ttl)
-    
+
     async def invalidate_tag(self, tag: str):
         """Delete all keys with this tag"""
         tag_key = f"tag:{tag}"
         keys = await self.redis.smembers(tag_key)
-        
+
         for key in keys:
             await self.redis.delete(key)
-        
+
         await self.redis.delete(tag_key)
 
 # Usage
@@ -440,6 +466,7 @@ await cache.invalidate_tag("user")
 ```
 
 **Best for:**
+
 - Complex relationships
 - Cascading updates
 - Related data sets
@@ -451,25 +478,26 @@ await cache.invalidate_tag("user")
 ```python
 async def smart_invalidate_user(user_id: str, changed_fields: list[str], redis_client):
     """Only invalidate if relevant fields changed"""
-    
+
     # Fields that affect different caches
     profile_fields = {"full_name", "email", "phone_number"}
     role_fields = {"role", "permissions"}
     stats_fields = {"login_count", "last_login"}
-    
+
     if any(field in profile_fields for field in changed_fields):
         await redis_client.delete(f"user:{user_id}")
         await redis_client.delete("users:list")
-    
+
     if any(field in role_fields for field in changed_fields):
         await redis_client.delete(f"user:{user_id}:permissions")
         await redis_client.delete("users:by_role")
-    
+
     if any(field in stats_fields for field in changed_fields):
         await redis_client.delete(f"user:{user_id}:stats")
 ```
 
 **Best for:**
+
 - Large cache sets
 - Performance optimization
 - Selective updates
@@ -488,16 +516,19 @@ async def smart_invalidate_user(user_id: str, changed_fields: list[str], redis_c
 ---
 
 ## 4. FastAPI + Redis Integration
+
 **Duration: 15 minutes**
 
 ### Setup & Configuration
 
 **Install Dependencies**
+
 ```bash
 pip install redis aioredis
 ```
 
 **Redis Client Initialization**
+
 ```python
 import aioredis
 from typing import Optional
@@ -506,31 +537,31 @@ class RedisClient:
     def __init__(self, url: str = "redis://localhost:6379"):
         self.url = url
         self.client: Optional[aioredis.Redis] = None
-    
+
     async def connect(self):
         """Establish connection"""
         self.client = await aioredis.from_url(self.url)
-    
+
     async def disconnect(self):
         """Close connection"""
         await self.client.close()
-    
+
     async def get(self, key: str):
         """Get value by key"""
         return await self.client.get(key)
-    
+
     async def set(self, key: str, value: str, ex: int = None):
         """Set value with optional expiration"""
         await self.client.set(key, value, ex=ex)
-    
+
     async def delete(self, key: str):
         """Delete key"""
         await self.client.delete(key)
-    
+
     async def exists(self, key: str) -> bool:
         """Check if key exists"""
         return await self.client.exists(key)
-    
+
     async def ttl(self, key: str) -> int:
         """Get time to live in seconds"""
         return await self.client.ttl(key)
@@ -582,7 +613,7 @@ def cache(
 ):
     """
     Decorator for caching async function results
-    
+
     Args:
         key_builder: Function to build cache key from arguments
         ttl: Time-to-live in seconds
@@ -593,29 +624,29 @@ def cache(
         async def wrapper(*args, redis_client: RedisClient = None, **kwargs):
             if not redis_client:
                 return await func(*args, **kwargs)
-            
+
             # Build cache key
             cache_key = key_builder(*args, **kwargs)
             if namespace:
                 cache_key = f"{namespace}:{cache_key}"
-            
+
             # Try cache first
             cached = await redis_client.get(cache_key)
             if cached:
                 return json.loads(cached)
-            
+
             # Cache miss - execute function
             result = await func(*args, **kwargs)
-            
+
             # Store in cache
             await redis_client.set(
                 cache_key,
                 json.dumps(result, default=str),
                 ex=ttl
             )
-            
+
             return result
-        
+
         return wrapper
     return decorator
 
@@ -640,24 +671,24 @@ async def get_user(
 ) -> UserResponse:
     """Get user with Redis caching (Cache-Aside pattern)"""
     cache_key = f"user:{user_id}"
-    
+
     # Try cache first
     cached = await redis.get(cache_key)
     if cached:
         return UserResponse(**json.loads(cached))
-    
+
     # Cache miss
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Store in cache
     await redis.set(
         cache_key,
         json.dumps(user.to_dict()),
         ex=3600  # 1 hour
     )
-    
+
     return user
 
 @app.get("/users")
@@ -669,22 +700,22 @@ async def list_users(
 ) -> list[UserResponse]:
     """List users with Redis caching"""
     cache_key = f"users:skip:{skip}:limit:{limit}"
-    
+
     # Try cache
     cached = await redis.get(cache_key)
     if cached:
         return [UserResponse(**u) for u in json.loads(cached)]
-    
+
     # Fetch from DB
     users = db.query(User).offset(skip).limit(limit).all()
-    
+
     # Cache
     await redis.set(
         cache_key,
         json.dumps([u.to_dict() for u in users]),
         ex=1800  # 30 minutes
     )
-    
+
     return users
 
 @app.put("/users/{user_id}")
@@ -698,18 +729,18 @@ async def update_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Update database
     for field, value in update.dict(exclude_unset=True).items():
         setattr(user, field, value)
-    
+
     db.commit()
     db.refresh(user)
-    
+
     # Invalidate cache
     await redis.delete(f"user:{user_id}")
     await redis.delete("users:*")  # Use SCAN to delete pattern
-    
+
     return user
 ```
 
@@ -719,14 +750,14 @@ async def update_user(
 async def cache_all_active_users(db: Session, redis: RedisClient):
     """Pre-warm cache with all active users"""
     users = db.query(User).filter(User.is_active == True).all()
-    
+
     for user in users:
         await redis.set(
             f"user:{user.id}",
             json.dumps(user.to_dict()),
             ex=3600
         )
-    
+
     return f"Cached {len(users)} users"
 
 @app.post("/admin/warm-cache")
@@ -743,11 +774,13 @@ async def warm_cache(
 ---
 
 ## 5. Session Storage
+
 **Duration: 5 minutes**
 
 ### Redis as Session Store
 
 **Why Redis for sessions?**
+
 - ✅ Extremely fast
 - ✅ Perfect for temporary data
 - ✅ Built-in expiration
@@ -763,7 +796,7 @@ class SessionManager:
     def __init__(self, redis_client: RedisClient, session_ttl: int = 86400):
         self.redis = redis_client
         self.session_ttl = session_ttl
-    
+
     async def create_session(self, user_id: str, data: dict = None):
         """Create new session"""
         session_id = str(uuid.uuid4())
@@ -773,38 +806,38 @@ class SessionManager:
             "last_activity": datetime.now().isoformat(),
             **(data or {})
         }
-        
+
         await self.redis.set(
             f"session:{session_id}",
             json.dumps(session_data),
             ex=self.session_ttl
         )
-        
+
         return session_id
-    
+
     async def get_session(self, session_id: str):
         """Retrieve session data"""
         data = await self.redis.get(f"session:{session_id}")
         if not data:
             return None
         return json.loads(data)
-    
+
     async def update_activity(self, session_id: str):
         """Update last activity timestamp (extends TTL)"""
         session = await self.get_session(session_id)
         if not session:
             return False
-        
+
         session["last_activity"] = datetime.now().isoformat()
-        
+
         await self.redis.set(
             f"session:{session_id}",
             json.dumps(session),
             ex=self.session_ttl
         )
-        
+
         return True
-    
+
     async def destroy_session(self, session_id: str):
         """Delete session"""
         await self.redis.delete(f"session:{session_id}")
@@ -822,11 +855,11 @@ async def login_with_session(
     user = authenticate_user(db, credentials.email, credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     # Create session
     manager = SessionManager(redis)
     session_id = await manager.create_session(str(user.id))
-    
+
     return {
         "session_id": session_id,
         "user_id": str(user.id),
@@ -841,13 +874,13 @@ async def protected_endpoint(
     """Protected endpoint using Redis sessions"""
     manager = SessionManager(redis)
     session = await manager.get_session(session_id)
-    
+
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
-    
+
     # Update activity
     await manager.update_activity(session_id)
-    
+
     return {
         "message": "Access granted",
         "user_id": session["user_id"]
@@ -857,6 +890,7 @@ async def protected_endpoint(
 ---
 
 ## 6. Performance Benchmarks & Best Practices
+
 **Duration: 5 minutes**
 
 ### Performance Comparison
@@ -903,31 +937,31 @@ async def redis_stats(redis: RedisClient = Depends(get_redis)):
 class CacheMetrics:
     def __init__(self, redis_client: RedisClient):
         self.redis = redis_client
-    
+
     async def log_hit(self, key: str):
         """Record cache hit"""
         await self.redis.incr(f"metrics:hits")
-    
+
     async def log_miss(self, key: str):
         """Record cache miss"""
         await self.redis.incr(f"metrics:misses")
-    
+
     async def get_hit_ratio(self) -> float:
         """Calculate hit ratio"""
         hits = int(await self.redis.get("metrics:hits") or 0)
         misses = int(await self.redis.get("metrics:misses") or 0)
         total = hits + misses
-        
+
         if total == 0:
             return 0
-        
+
         return (hits / total) * 100
 
 @app.get("/admin/cache-metrics")
 async def cache_metrics(redis: RedisClient = Depends(get_redis)):
     """Get cache performance metrics"""
     metrics = CacheMetrics(redis)
-    
+
     return {
         "hit_ratio_percent": await metrics.get_hit_ratio(),
         "hits": int(await redis.get("metrics:hits") or 0),
@@ -1013,44 +1047,44 @@ class UserCache:
     def __init__(self, redis: RedisClient, ttl: int = 3600):
         self.redis = redis
         self.ttl = ttl
-    
+
     async def get_user(self, user_id: str, db: Session) -> User:
         """Get user with automatic caching"""
         key = f"user:{user_id}"
-        
+
         # Try cache
         cached = await self.redis.get(key)
         if cached:
             await self.redis.incr("metrics:cache_hits")
             return User(**json.loads(cached))
-        
+
         # Cache miss
         await self.redis.incr("metrics:cache_misses")
         user = db.query(User).filter(User.id == user_id).first()
-        
+
         if user:
             await self.redis.set(
                 key,
                 json.dumps(user.to_dict()),
                 ex=self.ttl
             )
-        
+
         return user
-    
+
     async def update_user(self, user_id: str, data: dict, db: Session) -> User:
         """Update user and invalidate cache"""
         user = db.query(User).filter(User.id == user_id).first()
-        
+
         # Update DB
         for field, value in data.items():
             setattr(user, field, value)
         db.commit()
         db.refresh(user)
-        
+
         # Invalidate all user caches
         await self.redis.delete(f"user:{user_id}")
         await self.redis.delete(f"user:{user_id}:*")
-        
+
         return user
 ```
 
@@ -1071,6 +1105,7 @@ class UserCache:
 ### When to Use Redis
 
 ✅ **Use Redis for:**
+
 - User sessions
 - Rate limiting counters
 - Real-time counters (views, likes)
@@ -1080,6 +1115,7 @@ class UserCache:
 - Pub/Sub messaging
 
 ❌ **Don't use Redis for:**
+
 - Permanent data (no durability guarantee)
 - Large binary files (memory inefficient)
 - Complex queries
@@ -1092,6 +1128,7 @@ class UserCache:
 ### Task: Add Redis Caching to Your FastAPI Application
 
 **Requirements:**
+
 1. Install Redis and connect to FastAPI
 2. Implement Cache-Aside pattern for user queries
 3. Add Write-Through pattern for user updates
@@ -1102,6 +1139,7 @@ class UserCache:
 8. Add graceful degradation if Redis fails
 
 **Deliverables:**
+
 - ✅ `redis_client.py` - Redis client class
 - ✅ `cache_utils.py` - Caching utilities and decorators
 - ✅ Updated `main.py` - Integrated caching
@@ -1110,6 +1148,7 @@ class UserCache:
 - ✅ Test cache effectiveness with metrics
 
 **Evaluation Criteria:**
+
 - Cache hit ratio > 80% for repeated queries
 - Response time improvement > 50x for cached data
 - Proper cache invalidation on updates
@@ -1129,6 +1168,7 @@ See `REDIS_PRACTICE_ASSIGNMENT.md` for detailed instructions.
 ---
 
 **Duration Breakdown:**
+
 - Fundamentals: 10 min
 - Caching Patterns: 15 min
 - Invalidation: 10 min

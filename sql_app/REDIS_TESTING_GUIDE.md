@@ -76,12 +76,14 @@ Look for these messages in output:
 ```
 
 **If you see:**
+
 ```
 ⚠️  Redis connection failed
 ⚠️  Running without Redis caching
 ```
 
 **Check:**
+
 ```bash
 redis-cli ping  # Must output PONG
 ```
@@ -91,6 +93,7 @@ redis-cli ping  # Must output PONG
 Open in browser: `http://localhost:8000/docs`
 
 Look for new endpoint tags:
+
 - ✅ Caching - Users
 - ✅ Admin - Caching
 - ✅ Sessions - Redis
@@ -205,6 +208,7 @@ curl http://localhost:8000/admin/cache/stats \
 ```
 
 **What to check:**
+
 - `hit_ratio_percent` > 70% = Good
 - `hit_ratio_percent` > 85% = Excellent
 - `memory_usage_mb` < 100MB = Healthy
@@ -375,12 +379,14 @@ curl -s http://localhost:8000/admin/cache/stats | jq '.hit_ratio_percent'
 ```
 
 **Run it:**
+
 ```bash
 chmod +x test_cache_performance.sh
 ./test_cache_performance.sh
 ```
 
 **Expected output:**
+
 ```
 Test 1: ~100ms (DB query)
 Test 2: ~5ms (Cache hit)
@@ -449,7 +455,7 @@ from main import app
 
 async def run_tests():
     """Comprehensive Redis integration tests"""
-    
+
     # Test 1: Redis Connection
     print("✓ Test 1: Redis Connection")
     try:
@@ -459,38 +465,39 @@ async def run_tests():
     except Exception as e:
         print(f"  ❌ Redis failed: {e}")
         return
-    
+
     # Test 2: Cache Set/Get
     print("✓ Test 2: Cache Set/Get")
     await redis.set("test_key", "test_value", ex=3600)
     value = await redis.get("test_key")
     assert value == "test_value", "Cache set/get failed"
     print("  ✅ Cache operations work")
-    
+
     # Test 3: FastAPI Endpoint
     print("✓ Test 3: FastAPI Endpoint")
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.get("/users-cached")
         assert response.status_code == 200, f"Got {response.status_code}"
         print("  ✅ Endpoint works")
-    
+
     # Test 4: Cache Metrics
     print("✓ Test 4: Cache Metrics")
     async with AsyncClient(app=app, base_url="http://test") as client:
         response = await client.get("/admin/cache/stats")
         # Might fail without auth, but that's OK
         print("  ✅ Stats endpoint exists")
-    
+
     # Cleanup
     await redis.delete("test_key")
     await redis.close()
-    
+
     print("\n✅ All tests passed!")
 
 asyncio.run(run_tests())
 ```
 
 **Run it:**
+
 ```bash
 python test_redis_integration.py
 ```
@@ -500,6 +507,7 @@ python test_redis_integration.py
 ## 📋 Comprehensive Test Checklist
 
 ### Infrastructure (5 checks)
+
 - [ ] Redis installed and running
 - [ ] Redis port 6379 accessible
 - [ ] Python dependencies installed
@@ -507,6 +515,7 @@ python test_redis_integration.py
 - [ ] cache_utils.py exists and imports
 
 ### Application (5 checks)
+
 - [ ] App starts without errors
 - [ ] Redis connects on startup
 - [ ] Swagger UI loads
@@ -514,6 +523,7 @@ python test_redis_integration.py
 - [ ] Admin endpoints marked correctly
 
 ### Functionality (10 checks)
+
 - [ ] GET /users-cached returns users
 - [ ] GET /users-cached/{id} returns user
 - [ ] First call slower, second call faster
@@ -526,6 +536,7 @@ python test_redis_integration.py
 - [ ] Session operations work
 
 ### Performance (5 checks)
+
 - [ ] Cache hit ratio > 50%
 - [ ] Subsequent requests < 5ms
 - [ ] Memory usage < 100MB
@@ -533,6 +544,7 @@ python test_redis_integration.py
 - [ ] Response times consistent
 
 ### Error Handling (5 checks)
+
 - [ ] Works without Redis (degraded mode)
 - [ ] 404 for non-existent users
 - [ ] Invalid parameters handled
@@ -547,19 +559,19 @@ python test_redis_integration.py
 
 ### Response Time Goals
 
-| Endpoint | Target | Status |
-|----------|--------|--------|
-| First request | 80-100ms | ⏳ |
-| Cached request | <5ms | ⚡ |
-| Improvement ratio | >20x | 🎯 |
+| Endpoint          | Target   | Status |
+| ----------------- | -------- | ------ |
+| First request     | 80-100ms | ⏳     |
+| Cached request    | <5ms     | ⚡     |
+| Improvement ratio | >20x     | 🎯     |
 
 ### Cache Metrics Goals
 
-| Metric | Target | Status |
-|--------|--------|--------|
-| Hit ratio | >70% | 📊 |
-| Memory usage | <100MB | 💾 |
-| Connection stability | 99.9% | 🔗 |
+| Metric               | Target | Status |
+| -------------------- | ------ | ------ |
+| Hit ratio            | >70%   | 📊     |
+| Memory usage         | <100MB | 💾     |
+| Connection stability | 99.9%  | 🔗     |
 
 ---
 
@@ -569,15 +581,18 @@ Copy and fill this after running tests:
 
 ```markdown
 # Redis Integration Test Results
+
 Date: 2026-02-09
 Tester: [Your Name]
 
 ## Environment
+
 - Redis version: [output of redis-cli --version]
 - Python version: [python --version]
 - FastAPI version: [pip show fastapi]
 
 ## Test Results
+
 - Infrastructure: ✅/❌
 - Application: ✅/❌
 - Functionality: ✅/❌
@@ -585,20 +600,24 @@ Tester: [Your Name]
 - Error Handling: ✅/❌
 
 ## Performance Metrics
-- Average response time (first): ___ms
-- Average response time (cached): ___ms
-- Cache hit ratio: ___%
-- Memory usage: ___MB
+
+- Average response time (first): \_\_\_ms
+- Average response time (cached): \_\_\_ms
+- Cache hit ratio: \_\_\_%
+- Memory usage: \_\_\_MB
 
 ## Issues Found
+
 - [ ] None
 - [ ] Minor
 - [ ] Major
 
 ## Notes
+
 [Your observations]
 
 ## Sign-off
+
 Overall Status: ✅ Ready for production / ⚠️ Needs work
 ```
 
